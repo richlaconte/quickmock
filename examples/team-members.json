@@ -1,0 +1,338 @@
+{
+  "name": "Team members",
+  "description": "A team list with loading, empty and failed states, inviting someone in a modal form, and removing a member with a confirmation.",
+  "device": "desktop",
+  "start": "team.loading",
+  "data": { "simulateFailure": false, "hasMembers": true },
+  "screens": [
+    {
+      "id": "team",
+      "title": "Team",
+      "states": [
+        {
+          "id": "loading",
+          "note": "First paint, before the list arrives.",
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "heading", "level": 1, "text": "Team" },
+                { "type": "button", "label": "Invite someone", "event": "invite", "variant": "primary", "disabled": true }
+              ]
+            },
+            { "type": "skeleton", "lines": 4 }
+          ]
+        },
+        {
+          "id": "default",
+          "note": "The team, with one invite still pending.",
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "heading", "level": 1, "text": "Team" },
+                { "type": "button", "label": "Invite someone", "event": "invite", "variant": "primary" }
+              ]
+            },
+            {
+              "type": "table",
+              "columns": ["Name", "Email", "Role", "Status"],
+              "rows": [
+                ["Dana Whitfield", "dana@northwind.co", "Admin", "Active"],
+                ["Sam Okafor", "sam@northwind.co", "Editor", "Active"],
+                ["Lena Fischer", "lena@northwind.co", "Viewer", "Invited"]
+              ],
+              "rowEvent": "open-member",
+              "rowBind": "member"
+            }
+          ]
+        },
+        {
+          "id": "empty",
+          "note": "A new workspace with nobody in it yet.",
+          "questions": ["Does the owner count as a member, or is the list truly empty at first?"],
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            { "type": "heading", "level": 1, "text": "Team" },
+            {
+              "type": "empty",
+              "title": "No one on the team yet",
+              "text": "Invite a teammate to share projects with them.",
+              "action": { "label": "Invite someone", "event": "invite" }
+            }
+          ]
+        },
+        {
+          "id": "failed",
+          "note": "The list could not be loaded.",
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            { "type": "heading", "level": 1, "text": "Team" },
+            {
+              "type": "alert",
+              "tone": "error",
+              "text": "We could not load your team. Check your connection and try again.",
+              "action": { "label": "Try again", "event": "retry" }
+            }
+          ]
+        },
+        {
+          "id": "invited",
+          "note": "Back on the list after a successful invite.",
+          "preview": { "inviteEmail": "lena@northwind.co" },
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "heading", "level": 1, "text": "Team" },
+                { "type": "button", "label": "Invite someone", "event": "invite", "variant": "primary" }
+              ]
+            },
+            { "type": "alert", "tone": "success", "text": "Invite sent to {inviteEmail}." },
+            {
+              "type": "table",
+              "columns": ["Name", "Email", "Role", "Status"],
+              "rows": [
+                ["Dana Whitfield", "dana@northwind.co", "Admin", "Active"],
+                ["Sam Okafor", "sam@northwind.co", "Editor", "Active"],
+                ["Lena Fischer", "lena@northwind.co", "Viewer", "Invited"]
+              ],
+              "rowEvent": "open-member",
+              "rowBind": "member"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invite",
+      "title": "Invite a teammate",
+      "states": [
+        {
+          "id": "default",
+          "note": "A short form in a modal over the team list.",
+          "over": "team.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Invite a teammate",
+              "children": [
+                { "type": "input", "bind": "inviteEmail", "label": "Work email", "kind": "email", "placeholder": "name@company.com" },
+                { "type": "select", "bind": "inviteRole", "label": "Role", "options": ["Viewer", "Editor", "Admin", "Billing", "Owner"], "placeholder": "Choose a role" },
+                {
+                  "type": "row",
+                  "justify": "end",
+                  "children": [
+                    { "type": "button", "label": "Cancel", "event": "close", "variant": "quiet" },
+                    { "type": "button", "label": "Send invite", "event": "send", "variant": "primary" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "invalid",
+          "note": "Send was pressed without a usable email address.",
+          "preview": { "inviteEmail": "lena@" },
+          "over": "team.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Invite a teammate",
+              "children": [
+                {
+                  "type": "input",
+                  "bind": "inviteEmail",
+                  "label": "Work email",
+                  "kind": "email",
+                  "placeholder": "name@company.com",
+                  "error": "Enter an email address, like name@company.com."
+                },
+                { "type": "select", "bind": "inviteRole", "label": "Role", "options": ["Viewer", "Editor", "Admin", "Billing", "Owner"], "placeholder": "Choose a role" },
+                {
+                  "type": "row",
+                  "justify": "end",
+                  "children": [
+                    { "type": "button", "label": "Cancel", "event": "close", "variant": "quiet" },
+                    { "type": "button", "label": "Send invite", "event": "send", "variant": "primary" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sending",
+          "note": "The invite is on its way.",
+          "preview": { "inviteEmail": "lena@northwind.co" },
+          "over": "team.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Invite a teammate",
+              "children": [{ "type": "loading", "text": "Sending the invite to {inviteEmail}" }]
+            }
+          ]
+        },
+        {
+          "id": "failed",
+          "note": "The invite did not go out. Nothing was sent.",
+          "preview": { "inviteEmail": "lena@northwind.co" },
+          "over": "team.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Invite a teammate",
+              "children": [
+                {
+                  "type": "alert",
+                  "tone": "error",
+                  "text": "We could not send the invite to {inviteEmail}. Nothing was sent.",
+                  "action": { "label": "Try again", "event": "retry-send" }
+                },
+                {
+                  "type": "row",
+                  "justify": "end",
+                  "children": [{ "type": "button", "label": "Close", "event": "close" }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "member",
+      "title": "Member",
+      "states": [
+        {
+          "id": "default",
+          "note": "One person, and the one destructive thing you can do to them.",
+          "preview": { "member": "Dana Whitfield" },
+          "layout": [
+            { "type": "nav", "brand": "Northwind", "items": [{ "label": "Projects" }, { "label": "Team", "event": "nav-team", "active": true }, { "label": "Billing" }] },
+            { "type": "link", "text": "Back to team", "event": "back" },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                {
+                  "type": "stack",
+                  "gap": "sm",
+                  "children": [
+                    { "type": "heading", "level": 1, "text": "{member}" },
+                    { "type": "text", "text": "On the team since March", "tone": "muted" }
+                  ]
+                },
+                { "type": "badge", "text": "Active" }
+              ]
+            },
+            {
+              "type": "card",
+              "title": "Access",
+              "children": [
+                { "type": "text", "text": "Role: Admin" },
+                { "type": "text", "text": "Can manage people, billing and every project.", "tone": "muted", "size": "sm" }
+              ]
+            },
+            { "type": "button", "label": "Remove from team", "event": "remove", "variant": "danger" }
+          ]
+        },
+        {
+          "id": "confirm",
+          "note": "Name the person and the consequence before removing them.",
+          "preview": { "member": "Dana Whitfield" },
+          "questions": ["What happens to projects this person owns?"],
+          "over": "member.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Remove {member} from the team?",
+              "children": [
+                { "type": "text", "text": "They lose access to every project straight away. Their work stays." },
+                {
+                  "type": "row",
+                  "justify": "end",
+                  "children": [
+                    { "type": "button", "label": "Keep on team", "event": "close" },
+                    { "type": "button", "label": "Remove from team", "event": "confirm-remove", "variant": "danger" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "removing",
+          "note": "Removing the person.",
+          "preview": { "member": "Dana Whitfield" },
+          "over": "member.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Remove {member} from the team?",
+              "children": [{ "type": "loading", "text": "Removing {member}" }]
+            }
+          ]
+        },
+        {
+          "id": "failed",
+          "note": "The removal did not go through, and the person still has access.",
+          "preview": { "member": "Dana Whitfield" },
+          "over": "member.default",
+          "layout": [
+            {
+              "type": "modal",
+              "title": "Could not remove {member}",
+              "children": [
+                {
+                  "type": "alert",
+                  "tone": "error",
+                  "text": "Something went wrong on our side. {member} still has access.",
+                  "action": { "label": "Try again", "event": "retry-remove" }
+                },
+                {
+                  "type": "row",
+                  "justify": "end",
+                  "children": [{ "type": "button", "label": "Close", "event": "close" }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    { "from": "*", "on": "nav-team", "to": "team.default" },
+    { "from": "team.loading", "after": 900, "when": "simulateFailure", "to": "team.failed" },
+    { "from": "team.loading", "after": 900, "when": "!hasMembers", "to": "team.empty" },
+    { "from": "team.loading", "after": 900, "to": "team.default" },
+    { "from": "team.failed", "on": "retry", "set": { "simulateFailure": false }, "to": "team.loading" },
+    { "from": "team.*", "on": "invite", "to": "invite.default" },
+    { "from": "team.*", "on": "open-member", "to": "member.default" },
+    { "from": "invite.default", "on": "send", "when": "isEmail(inviteEmail)", "to": "invite.sending" },
+    { "from": "invite.default", "on": "send", "to": "invite.invalid" },
+    { "from": "invite.invalid", "on": "send", "when": "isEmail(inviteEmail)", "to": "invite.sending" },
+    { "from": "invite.invalid", "on": "send", "to": "invite.invalid" },
+    { "from": "invite.*", "on": "close", "to": "team.default" },
+    { "from": "invite.sending", "after": 1000, "when": "simulateFailure", "to": "invite.failed" },
+    { "from": "invite.sending", "after": 1000, "to": "team.invited" },
+    { "from": "invite.failed", "on": "retry-send", "set": { "simulateFailure": false }, "to": "invite.sending" },
+    { "from": "member.default", "on": "back", "to": "team.default" },
+    { "from": "member.default", "on": "remove", "to": "member.confirm" },
+    { "from": "member.confirm", "on": "close", "to": "member.default" },
+    { "from": "member.confirm", "on": "confirm-remove", "to": "member.removing" },
+    { "from": "member.removing", "after": 900, "when": "simulateFailure", "to": "member.failed" },
+    { "from": "member.removing", "after": 900, "to": "team.default" },
+    { "from": "member.failed", "on": "retry-remove", "set": { "simulateFailure": false }, "to": "member.removing" },
+    { "from": "member.failed", "on": "close", "to": "member.default" }
+  ]
+}

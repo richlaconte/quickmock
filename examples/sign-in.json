@@ -1,0 +1,153 @@
+{
+  "name": "Sign in",
+  "description": "Email and password sign-in on a phone, with validation, wrong credentials and a password reset.",
+  "device": "mobile",
+  "start": "sign-in.default",
+  "data": { "simulateFailure": false },
+  "screens": [
+    {
+      "id": "sign-in",
+      "title": "Sign in",
+      "states": [
+        {
+          "id": "default",
+          "note": "Two fields and one action.",
+          "questions": ["Do we offer sign-in with Google or SSO here as well?"],
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Sign in to Northwind" },
+            { "type": "input", "bind": "email", "label": "Email", "kind": "email", "placeholder": "name@company.com" },
+            { "type": "input", "bind": "password", "label": "Password", "kind": "password" },
+            { "type": "button", "label": "Sign in", "event": "sign-in", "variant": "primary", "full": true },
+            { "type": "link", "text": "Forgot your password?", "event": "forgot" }
+          ]
+        },
+        {
+          "id": "invalid",
+          "note": "Sign in was pressed with an unusable email or a short password.",
+          "preview": { "email": "dana@", "password": "" },
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Sign in to Northwind" },
+            {
+              "type": "input",
+              "bind": "email",
+              "label": "Email",
+              "kind": "email",
+              "placeholder": "name@company.com",
+              "error": "Enter an email address, like name@company.com."
+            },
+            { "type": "input", "bind": "password", "label": "Password", "kind": "password", "error": "Use at least 8 characters." },
+            { "type": "button", "label": "Sign in", "event": "sign-in", "variant": "primary", "full": true },
+            { "type": "link", "text": "Forgot your password?", "event": "forgot" }
+          ]
+        },
+        {
+          "id": "submitting",
+          "note": "Checking the email and password.",
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Sign in to Northwind" },
+            { "type": "loading", "text": "Signing you in" }
+          ]
+        },
+        {
+          "id": "failed",
+          "note": "The email and password do not match an account.",
+          "preview": { "email": "dana@northwind.co", "password": "not-the-one" },
+          "questions": ["After how many wrong tries do we lock the account or add a delay?"],
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Sign in to Northwind" },
+            { "type": "alert", "tone": "error", "text": "That email and password do not match. Check them and try again." },
+            { "type": "input", "bind": "email", "label": "Email", "kind": "email", "placeholder": "name@company.com" },
+            { "type": "input", "bind": "password", "label": "Password", "kind": "password" },
+            { "type": "button", "label": "Sign in", "event": "sign-in", "variant": "primary", "full": true },
+            { "type": "link", "text": "Forgot your password?", "event": "forgot" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reset",
+      "title": "Reset password",
+      "states": [
+        {
+          "id": "default",
+          "note": "The email typed on the sign-in screen carries over.",
+          "layout": [
+            { "type": "link", "text": "Back to sign in", "event": "back" },
+            { "type": "heading", "level": 1, "text": "Reset your password" },
+            { "type": "text", "text": "We will email you a link to choose a new one." },
+            { "type": "input", "bind": "email", "label": "Email", "kind": "email", "placeholder": "name@company.com" },
+            { "type": "button", "label": "Send reset link", "event": "send-reset", "variant": "primary", "full": true }
+          ]
+        },
+        {
+          "id": "invalid",
+          "note": "Send was pressed without a usable email address.",
+          "preview": { "email": "dana@" },
+          "layout": [
+            { "type": "link", "text": "Back to sign in", "event": "back" },
+            { "type": "heading", "level": 1, "text": "Reset your password" },
+            { "type": "text", "text": "We will email you a link to choose a new one." },
+            {
+              "type": "input",
+              "bind": "email",
+              "label": "Email",
+              "kind": "email",
+              "placeholder": "name@company.com",
+              "error": "Enter an email address, like name@company.com."
+            },
+            { "type": "button", "label": "Send reset link", "event": "send-reset", "variant": "primary", "full": true }
+          ]
+        },
+        {
+          "id": "sent",
+          "note": "The same message whether or not the account exists.",
+          "preview": { "email": "dana@northwind.co" },
+          "questions": ["Do we say the same thing when no account has this email?"],
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Check your email" },
+            { "type": "text", "text": "We sent a reset link to {email}. It works for one hour." },
+            { "type": "button", "label": "Back to sign in", "event": "back", "full": true }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "title": "Home",
+      "states": [
+        {
+          "id": "default",
+          "note": "Signed in. The flow ends here.",
+          "end": true,
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Good morning, Dana" },
+            { "type": "text", "text": "Three projects changed since yesterday.", "tone": "muted" },
+            {
+              "type": "list",
+              "items": [
+                { "title": "Website refresh", "subtitle": "Sam added 4 comments", "meta": "2h" },
+                { "title": "Mobile onboarding", "subtitle": "Lena moved it to review", "meta": "5h" },
+                { "title": "Q1 pricing", "subtitle": "You were mentioned", "meta": "1d" }
+              ]
+            },
+            {
+              "type": "nav",
+              "kind": "bottom",
+              "items": [{ "label": "Home", "active": true }, { "label": "Projects" }, { "label": "Profile" }]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    { "from": "sign-in.*", "on": "sign-in", "when": "isEmail(email) && len(password) >= 8", "to": "sign-in.submitting" },
+    { "from": "sign-in.*", "on": "sign-in", "to": "sign-in.invalid" },
+    { "from": "sign-in.*", "on": "forgot", "to": "reset.default" },
+    { "from": "sign-in.submitting", "after": 1200, "when": "simulateFailure", "to": "sign-in.failed" },
+    { "from": "sign-in.submitting", "after": 1200, "to": "home.default" },
+    { "from": "reset.*", "on": "back", "to": "sign-in.default" },
+    { "from": "reset.*", "on": "send-reset", "when": "isEmail(email)", "to": "reset.sent" },
+    { "from": "reset.*", "on": "send-reset", "to": "reset.invalid" }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "quickmock",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Lo-fi, pen-and-ink flow prototypes driven by an agent over MCP. One spec, two views: a board of every screen state and a working prototype.",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "prestart": "node scripts/check-node.mjs",
+    "start": "tsx src/server/index.ts",
+    "predev": "node scripts/check-node.mjs",
+    "dev": "tsx watch src/server/index.ts",
+    "build": "vite build",
+    "test": "node --import tsx --test test/*.test.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.1.4",
+    "@fontsource/architects-daughter": "^5.3.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/reenie-beanie": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@vitejs/plugin-react": "^6.3.0",
+    "express": "^5.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "roughjs": "^4.6.6",
+    "tsx": "^4.23.15",
+    "vite": "^8.3.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.10",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,323 @@
+{
+  "name": "Cancel subscription",
+  "description": "A customer cancels a paid plan: reason, retention offer, confirmation, and what happens when billing fails.",
+  "device": "desktop",
+  "start": "account.default",
+  "data": { "simulateFailure": false, "cancelled": false },
+  "screens": [
+    {
+      "id": "account",
+      "title": "Plan and billing",
+      "states": [
+        {
+          "id": "default",
+          "note": "Where the flow starts: an active Pro plan.",
+          "questions": ["Do annual plans see a prorated refund amount here?"],
+          "layout": [
+            {
+              "type": "nav",
+              "brand": "Northwind",
+              "items": [{ "label": "Projects" }, { "label": "Team" }, { "label": "Billing", "event": "nav-billing", "active": true }]
+            },
+            { "type": "heading", "level": 1, "text": "Plan and billing" },
+            {
+              "type": "card",
+              "title": "Current plan",
+              "children": [
+                {
+                  "type": "row",
+                  "justify": "between",
+                  "children": [
+                    {
+                      "type": "stack",
+                      "gap": "sm",
+                      "children": [
+                        { "type": "text", "text": "Pro, billed monthly" },
+                        { "type": "text", "text": "$29 a month. Renews on 14 January.", "tone": "muted", "size": "sm" }
+                      ]
+                    },
+                    { "type": "badge", "text": "Active" }
+                  ]
+                }
+              ]
+            },
+            { "type": "link", "text": "Cancel plan", "event": "cancel" }
+          ]
+        },
+        {
+          "id": "cancelled",
+          "note": "After cancelling: the plan runs to the end of the period and can be resumed.",
+          "layout": [
+            {
+              "type": "nav",
+              "brand": "Northwind",
+              "items": [{ "label": "Projects" }, { "label": "Team" }, { "label": "Billing", "event": "nav-billing", "active": true }]
+            },
+            { "type": "heading", "level": 1, "text": "Plan and billing" },
+            {
+              "type": "alert",
+              "tone": "info",
+              "text": "Your Pro plan ends on 14 January. Until then nothing changes.",
+              "action": { "label": "Resume plan", "event": "resume" }
+            },
+            {
+              "type": "card",
+              "title": "Current plan",
+              "children": [
+                {
+                  "type": "row",
+                  "justify": "between",
+                  "children": [
+                    {
+                      "type": "stack",
+                      "gap": "sm",
+                      "children": [
+                        { "type": "text", "text": "Pro, billed monthly" },
+                        { "type": "text", "text": "Ends on 14 January. You will not be charged again.", "tone": "muted", "size": "sm" }
+                      ]
+                    },
+                    { "type": "badge", "text": "Cancelling", "tone": "muted" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reason",
+      "title": "Step 1: reason",
+      "states": [
+        {
+          "id": "default",
+          "note": "Ask why, so the offer on the next step can fit the answer.",
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 1 },
+            { "type": "heading", "level": 1, "text": "Why are you leaving?" },
+            { "type": "text", "text": "Your answer helps us decide what to fix next.", "tone": "muted" },
+            {
+              "type": "radio",
+              "bind": "reason",
+              "label": "Pick the closest reason",
+              "options": ["It costs too much", "I am missing a feature", "I do not use it enough", "Something else"]
+            },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "button", "label": "Keep my plan", "event": "keep", "variant": "quiet" },
+                { "type": "button", "label": "Continue", "event": "continue", "variant": "primary" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "other",
+          "note": "Picking Something else reveals a free-text field.",
+          "preview": { "reason": "Something else" },
+          "questions": ["Is the free text required, or can people skip it?"],
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 1 },
+            { "type": "heading", "level": 1, "text": "Why are you leaving?" },
+            { "type": "text", "text": "Your answer helps us decide what to fix next.", "tone": "muted" },
+            {
+              "type": "radio",
+              "bind": "reason",
+              "label": "Pick the closest reason",
+              "options": ["It costs too much", "I am missing a feature", "I do not use it enough", "Something else"]
+            },
+            {
+              "type": "input",
+              "bind": "otherReason",
+              "label": "What is the reason?",
+              "kind": "multiline",
+              "placeholder": "A sentence is enough",
+              "hint": "Optional"
+            },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "button", "label": "Keep my plan", "event": "keep", "variant": "quiet" },
+                { "type": "button", "label": "Continue", "event": "continue", "variant": "primary" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "invalid",
+          "note": "Continue was pressed with nothing picked.",
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 1 },
+            { "type": "heading", "level": 1, "text": "Why are you leaving?" },
+            { "type": "alert", "tone": "error", "text": "Pick a reason to continue." },
+            {
+              "type": "radio",
+              "bind": "reason",
+              "label": "Pick the closest reason",
+              "options": ["It costs too much", "I am missing a feature", "I do not use it enough", "Something else"]
+            },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "button", "label": "Keep my plan", "event": "keep", "variant": "quiet" },
+                { "type": "button", "label": "Continue", "event": "continue", "variant": "primary" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "offer",
+      "title": "Step 2: offer",
+      "states": [
+        {
+          "id": "default",
+          "note": "One retention offer before the final confirmation.",
+          "questions": ["Is the offer shown to everyone, or only when the reason is cost?"],
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 2 },
+            { "type": "heading", "level": 1, "text": "Stay for half price?" },
+            {
+              "type": "card",
+              "title": "Pro at 50% off for 3 months",
+              "children": [
+                { "type": "text", "text": "Pay $14.50 a month until April, then $29 again. Cancel any time." }
+              ]
+            },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "button", "label": "Back", "event": "back", "variant": "quiet" },
+                {
+                  "type": "row",
+                  "children": [
+                    { "type": "button", "label": "No thanks", "event": "decline" },
+                    { "type": "button", "label": "Take the offer", "event": "accept", "variant": "primary" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "accepted",
+          "note": "The customer stays, on the discounted price.",
+          "questions": ["Should Billing show the discounted price straight away?"],
+          "layout": [
+            { "type": "heading", "level": 1, "text": "Offer applied" },
+            { "type": "alert", "tone": "success", "text": "You now pay $14.50 a month until April." },
+            { "type": "button", "label": "Back to billing", "event": "finish", "variant": "primary" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "title": "Step 3: confirm",
+      "states": [
+        {
+          "id": "default",
+          "note": "Say exactly what is lost and when, then ask once.",
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 3 },
+            { "type": "heading", "level": 1, "text": "Cancel your Pro plan?" },
+            { "type": "text", "text": "You keep Pro until 14 January. After that:" },
+            {
+              "type": "list",
+              "items": [
+                { "title": "Projects over the free limit become read-only" },
+                { "title": "Teammates lose edit access" },
+                { "title": "Invoices stay available in Billing" }
+              ]
+            },
+            {
+              "type": "row",
+              "justify": "between",
+              "children": [
+                { "type": "button", "label": "Keep my plan", "event": "keep" },
+                { "type": "button", "label": "Cancel plan", "event": "confirm", "variant": "danger" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "submitting",
+          "note": "Waiting on the billing provider.",
+          "questions": ["How long can this take before we show a slow-connection message?"],
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 3 },
+            { "type": "heading", "level": 1, "text": "Cancel your Pro plan?" },
+            { "type": "loading", "text": "Cancelling your plan" }
+          ]
+        },
+        {
+          "id": "failed",
+          "note": "Billing did not answer. Nothing changed, and the customer can retry or back out.",
+          "layout": [
+            { "type": "steps", "items": ["Reason", "Offer", "Confirm"], "current": 3 },
+            { "type": "heading", "level": 1, "text": "Cancel your Pro plan?" },
+            {
+              "type": "alert",
+              "tone": "error",
+              "text": "We could not reach the billing provider, so your plan has not changed.",
+              "action": { "label": "Try again", "event": "retry" }
+            },
+            { "type": "text", "text": "If this keeps happening, contact support and we will cancel it for you.", "tone": "muted", "size": "sm" },
+            { "type": "button", "label": "Keep my plan", "event": "keep" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "done",
+      "title": "Cancelled",
+      "states": [
+        {
+          "id": "default",
+          "note": "Confirmation, with the end date repeated.",
+          "layout": [
+            {
+              "type": "nav",
+              "brand": "Northwind",
+              "items": [{ "label": "Projects" }, { "label": "Team" }, { "label": "Billing", "event": "nav-billing", "active": true }]
+            },
+            { "type": "heading", "level": 1, "text": "Your plan is cancelled" },
+            { "type": "text", "text": "You keep Pro until 14 January. We have emailed you a confirmation." },
+            { "type": "button", "label": "Back to billing", "event": "back-to-billing", "variant": "primary" }
+          ]
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    { "from": "*", "on": "nav-billing", "when": "cancelled", "to": "account.cancelled" },
+    { "from": "*", "on": "nav-billing", "to": "account.default" },
+    { "from": "account.default", "on": "cancel", "to": "reason.default" },
+    { "from": "account.cancelled", "on": "resume", "set": { "cancelled": false }, "to": "account.default" },
+    { "from": "reason.*", "on": "keep", "to": "account.default" },
+    { "from": "reason.default", "on": "change:reason", "when": "reason == 'Something else'", "to": "reason.other" },
+    { "from": "reason.invalid", "on": "change:reason", "when": "reason == 'Something else'", "to": "reason.other" },
+    { "from": "reason.invalid", "on": "change:reason", "to": "reason.default" },
+    { "from": "reason.other", "on": "change:reason", "when": "reason != 'Something else'", "to": "reason.default" },
+    { "from": "reason.default", "on": "continue", "when": "reason != ''", "to": "offer.default" },
+    { "from": "reason.default", "on": "continue", "to": "reason.invalid" },
+    { "from": "reason.invalid", "on": "continue", "to": "reason.invalid" },
+    { "from": "reason.other", "on": "continue", "to": "offer.default" },
+    { "from": "offer.default", "on": "back", "when": "reason == 'Something else'", "to": "reason.other" },
+    { "from": "offer.default", "on": "back", "to": "reason.default" },
+    { "from": "offer.default", "on": "accept", "to": "offer.accepted" },
+    { "from": "offer.default", "on": "decline", "to": "confirm.default" },
+    { "from": "offer.accepted", "on": "finish", "to": "account.default" },
+    { "from": "confirm.*", "on": "keep", "to": "account.default" },
+    { "from": "confirm.default", "on": "confirm", "to": "confirm.submitting" },
+    { "from": "confirm.submitting", "after": 1400, "when": "simulateFailure", "to": "confirm.failed" },
+    { "from": "confirm.submitting", "after": 1400, "set": { "cancelled": true }, "to": "done.default" },
+    { "from": "confirm.failed", "on": "retry", "set": { "simulateFailure": false }, "to": "confirm.submitting" },
+    { "from": "done.default", "on": "back-to-billing", "to": "account.cancelled" }
+  ]
+}
