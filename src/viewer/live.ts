@@ -7,10 +7,11 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import type { Person, Role, ServerEvent } from "../shared/types";
+import { API } from "./workspace";
 
 // ── who this page is ────────────────────────────────────────────────────────
 
-/** A random id. Pages opened over plain http on a network address have no crypto.randomUUID, so build one. */
+/** A random id. */
 function randomId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -139,7 +140,7 @@ function setOnline(next: boolean): void {
 }
 
 function connect(): void {
-  source = new EventSource(`/api/events?client=${encodeURIComponent(clientId)}`);
+  source = new EventSource(`${API}/events?client=${encodeURIComponent(clientId)}`);
   source.onopen = () => {
     setOnline(true);
     // After a reconnect anything may have changed while we were away.
@@ -162,11 +163,6 @@ function connect(): void {
       // ignore malformed events
     }
   };
-}
-
-// When this file is edited while the page is open, close the old connection instead of leaving two.
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => source?.close());
 }
 
 /** Listen for changes on the server. One connection serves every listener on the page. */
@@ -193,7 +189,7 @@ function subscribeOnline(listener: () => void): () => void {
   };
 }
 
-/** False once the server has not answered for a few seconds: it was stopped, or sharing was turned off. */
+/** False once the server has not answered for a few seconds: the connection dropped, or sharing was turned off. */
 export function useOnline(): boolean {
   return useSyncExternalStore(subscribeOnline, () => online);
 }
@@ -235,11 +231,13 @@ interface Report {
 /** Everything this page has said about itself. Each report sends all of it, so a restarted server catches up at once. */
 const state: Report = { name: myName };
 let dirty = false;
+/** True while the pointer is the only thing that changed since the last report. Those are most reports, and the cheapest. */
+let cursorOnly = true;
 let inFlight = false;
 let timer: number | undefined;
 let sentAt = 0;
-/** Pointers are reported at most this often. */
-const EVERY_MS = 50;
+/** Pointers are reported at most this often. Every report is a request, so this is also what a moving pointer costs. */
+const EVERY_MS = 80;
 
 function flush(): void {
   timer = undefined;
@@ -247,10 +245,12 @@ function flush(): void {
   dirty = false;
   inFlight = true;
   sentAt = Date.now();
-  fetch("/api/presence", {
+  const body = cursorOnly ? { client: clientId, only: "cursor", flowId: state.flowId, cursor: state.cursor } : { ...state, client: clientId };
+  cursorOnly = true;
+  fetch(`${API}/presence`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...state, client: clientId }),
+    body: JSON.stringify(body),
     keepalive: true,
   })
     .catch(() => undefined)
@@ -268,6 +268,8 @@ function schedule(): void {
 /** Tell everyone else something about this page: its flow, its frame, where its pointer is. */
 export function announce(report: Report): void {
   Object.assign(state, report);
+  const keys = Object.keys(report);
+  if (keys.length === 0 || keys.some((key) => key !== "cursor")) cursorOnly = false;
   dirty = true;
   schedule();
 }

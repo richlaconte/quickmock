@@ -1,5 +1,5 @@
-// The Share button: opens a second, key-protected door so other people can
-// look at the board while quickmock runs on this computer.
+// The Share button: makes a guest link, so other people can look at the board,
+// click through the prototype and leave notes.
 
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
@@ -7,9 +7,9 @@ import type { ShareStatus } from "../shared/types";
 import { getSharing, setSharing, useServerEvents } from "./api";
 import { cx } from "./kit/render";
 
-const OFF: ShareStatus = { on: false, starting: false, links: [] };
+const OFF: ShareStatus = { on: false };
 
-function CopyRow({ label, value }: { label: string; value: string }): ReactElement {
+export function CopyRow({ label, value }: { label: string; value: string }): ReactElement {
   const [copied, setCopied] = useState(false);
   const copy = (): void => {
     void navigator.clipboard?.writeText(value).then(() => {
@@ -39,7 +39,7 @@ export function ShareButton({ flowId }: { flowId: string }): ReactElement {
   }, []);
   useEffect(refresh, [refresh]);
   useServerEvents((event) => {
-    // A flow event with no id means the connection came back, and the server may have restarted with sharing off.
+    // A flow event with no id means the connection came back, and sharing may have changed meanwhile.
     if (event.type === "share" || (event.type === "flow" && !event.id)) refresh();
   });
 
@@ -58,12 +58,9 @@ export function ShareButton({ flowId }: { flowId: string }): ReactElement {
     );
   };
 
-  // Links open straight on this flow. The part after # stays in the browser; the server never sees it.
-  const here = (url: string): string => `${url}#/f/${encodeURIComponent(flowId)}`;
-  const network = status.links.filter((link) => link.label !== "This computer");
-  const local = status.links.find((link) => link.label === "This computer");
-  const starting = busy || status.starting;
-  const problem = failed ?? status.error;
+  // The link opens straight on this flow. The part after # stays in the browser; the server never sees it.
+  const link = status.link ? `${status.link}#/f/${encodeURIComponent(flowId)}` : "";
+  const problem = failed;
 
   return (
     <div className="share">
@@ -76,41 +73,22 @@ export function ShareButton({ flowId }: { flowId: string }): ReactElement {
           {!status.on ? (
             <>
               <p>
-                Other people open a link in their browser while quickmock runs on this computer. You see each other's pointers, and they can click
-                through the prototype and leave notes and sticky notes.
+                Other people open a link in their browser. You see each other's pointers, and they can click through the prototype and leave notes
+                and sticky notes.
               </p>
-              <p>They cannot reach your agent, change a flow, or see anything else on this computer.</p>
-              <button type="button" className="bar-button" disabled={starting} onClick={() => turn(true)}>
-                {starting ? "Getting the shared copy ready" : "Start sharing"}
+              <p>They see every flow in this workspace. They cannot reach your agent, change a flow, or change your notes.</p>
+              <button type="button" className="bar-button" disabled={busy} onClick={() => turn(true)}>
+                Start sharing
               </button>
-              {starting && <p className="quiet">This takes a few seconds the first time.</p>}
             </>
           ) : (
             <>
-              {network.length > 0 ? (
-                <>
-                  <p>For people on the same network as this computer:</p>
-                  {network.map((link) => (
-                    <CopyRow key={link.url} label="Link" value={here(link.url)} />
-                  ))}
-                </>
-              ) : (
-                <p>This computer is not on a network other people can reach, so there is no link for them yet.</p>
-              )}
-              {local && (
-                <>
-                  <p>
-                    For someone elsewhere, run a tunnel to port {status.port} (for example <code>cloudflared tunnel --url http://localhost:{status.port}</code>
-                    ) and add this to the address it gives you:
-                  </p>
-                  <CopyRow label="Add" value={here(`/?key=${status.key ?? ""}`)} />
-                </>
-              )}
+              <p>Send this link to the people you want to look:</p>
+              <CopyRow label="Link" value={link} />
               <p className="quiet">
-                Anyone with a link can get in until you stop. Stopping makes these links useless, and starting again makes new ones. If macOS asks
-                whether to allow incoming connections, allow it.
+                Anyone with the link can get in until you stop. Stopping makes this link useless, and starting again makes a new one.
               </p>
-              <button type="button" className="bar-button" disabled={starting} onClick={() => turn(false)}>
+              <button type="button" className="bar-button" disabled={busy} onClick={() => turn(false)}>
                 Stop sharing
               </button>
             </>

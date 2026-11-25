@@ -1,18 +1,11 @@
-// Notes the person writes in the viewer. They live in flows/.notes/<flow>.json,
-// beside the flows instead of inside them: they belong to the reviewer, and an
-// agent replacing a state must not be able to lose them.
-
-import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// Notes the person writes in the viewer. They live in their own table, beside
+// the flows instead of inside them: they belong to the reviewer, and an agent
+// replacing a state must not be able to lose them.
 
 import type { ReviewNote } from "../shared/types";
-
-interface NoteFile {
-  /** The number the next note gets, so ids are never reused. */
-  next: number;
-  notes: ReviewNote[];
-}
+import { query } from "./db";
+import { send } from "./hub";
+import { limitsFor } from "./limits";
 
 export interface NoteInput {
   frame: string;
@@ -32,8 +25,6 @@ export interface NotePatch {
 }
 
 export const NOTE_MAX_LENGTH = 1000;
-/** More notes than a review ever produces; the limit only stops a file growing without end. */
-export const NOTES_PER_FLOW = 500;
 
 function clip(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -93,111 +84,89 @@ export function readNotePatch(body: unknown): NotePatch | string {
   return Object.keys(patch).length ? patch : "There is nothing to change: send \"text\", or \"frame\" and \"sticky\".";
 }
 
-export class NoteStore extends EventEmitter {
-  private cache = new Map<string, NoteFile>();
+export class NoteStore {
+  constructor(readonly ws: string) {}
 
-  /** `dir` is the flows folder; notes go in its `.notes` subfolder. */
-  constructor(private readonly dir: string) {
-    super();
-  }
-
-  private path(flowId: string): string {
-    return join(this.dir, ".notes", `${flowId}.json`);
-  }
-
-  private read(flowId: string): NoteFile {
-    const cached = this.cache.get(flowId);
-    if (cached) return cached;
-    let file: NoteFile = { next: 1, notes: [] };
-    try {
-      if (existsSync(this.path(flowId))) {
-        const parsed = JSON.parse(readFileSync(this.path(flowId), "utf8")) as Partial<NoteFile>;
-        const notes = Array.isArray(parsed.notes) ? parsed.notes.filter((n) => n && typeof n.id === "string" && typeof n.text === "string") : [];
-        const highest = notes.reduce((max, n) => Math.max(max, Number(n.id.slice(1)) || 0), 0);
-        file = { next: Math.max(typeof parsed.next === "number" ? parsed.next : 1, highest + 1), notes };
-      }
-    } catch {
-      // A notes file that cannot be read is treated as empty; the flow itself is unaffected.
-    }
-    this.cache.set(flowId, file);
-    return file;
-  }
-
-  private write(flowId: string, file: NoteFile): void {
-    mkdirSync(join(this.dir, ".notes"), { recursive: true });
-    writeFileSync(this.path(flowId), `${JSON.stringify(file, null, 2)}\n`);
-    this.emit("change", { type: "notes", id: flowId });
+  private async write(flowId: string, note: ReviewNote): Promise<ReviewNote> {
+    await query("update notes set body = $4 where ws = $1 and flow_id = $2 and id = $3", [this.ws, flowId, note.id, JSON.stringify(note)]);
+    await send(this.ws, { type: "notes", id: flowId });
+    return note;
   }
 
   /** Every note on a flow, oldest first. */
-  list(flowId: string): ReviewNote[] {
-    return this.read(flowId).notes;
+  async list(flowId: string): Promise<ReviewNote[]> {
+    const rows = await query<{ body: ReviewNote }>("select body from notes where ws = $1 and flow_id = $2 order by seq", [this.ws, flowId]);
+    return rows.map((r) => r.body);
   }
 
-  open(flowId: string): ReviewNote[] {
-    return this.list(flowId).filter((note) => !note.done);
+  async open(flowId: string): Promise<ReviewNote[]> {
+    return (await this.list(flowId)).filter((note) => !note.done);
+  }
+
+  /** How many open notes each flow in the workspace has. */
+  async openCounts(): Promise<Map<string, number>> {
+    const rows = await query<{ flow_id: string; n: string }>(
+      "select flow_id, count(*) as n from notes where ws = $1 and (body->>'done') is null group by flow_id",
+      [this.ws],
+    );
+    return new Map(rows.map((r) => [r.flow_id, Number(r.n)]));
   }
 
   /** `guest` marks a note that came in over the share link. Returns undefined when the flow has too many notes. */
-  add(flowId: string, input: NoteInput, guest = false): ReviewNote | undefined {
-    const file = this.read(flowId);
-    if (file.notes.length >= NOTES_PER_FLOW) return undefined;
-    const note: ReviewNote = { id: `n${file.next}`, frame: input.frame, text: input.text, at: new Date().toISOString() };
+  async add(flowId: string, input: NoteInput, guest = false): Promise<ReviewNote | undefined> {
+    const count = await query<{ n: string }>("select count(*) as n from notes where ws = $1 and flow_id = $2", [this.ws, flowId]);
+    if (Number(count[0].n) >= limitsFor(this.ws).notesPerFlow) return undefined;
+    // The flow keeps the counter, so an id is never given out twice, even after a note is deleted.
+    const next = await query<{ note_seq: number }>("update flows set note_seq = note_seq + 1 where ws = $1 and id = $2 returning note_seq", [this.ws, flowId]);
+    if (!next[0]) return undefined;
+    const seq = next[0].note_seq;
+    const note: ReviewNote = { id: `n${seq}`, frame: input.frame, text: input.text, at: new Date().toISOString() };
     if (input.target && !input.sticky) note.target = input.target;
     if (input.sticky) note.sticky = input.sticky;
     if (input.author) note.author = input.author;
     if (guest) note.guest = true;
-    file.next += 1;
-    file.notes.push(note);
-    this.write(flowId, file);
+    await query("insert into notes (ws, flow_id, id, seq, body) values ($1, $2, $3, $4, $5)", [this.ws, flowId, note.id, seq, JSON.stringify(note)]);
+    await send(this.ws, { type: "notes", id: flowId });
     return note;
   }
 
-  get(flowId: string, noteId: string): ReviewNote | undefined {
-    return this.read(flowId).notes.find((n) => n.id === noteId);
+  async get(flowId: string, noteId: string): Promise<ReviewNote | undefined> {
+    const rows = await query<{ body: ReviewNote }>("select body from notes where ws = $1 and flow_id = $2 and id = $3", [this.ws, flowId, noteId]);
+    return rows[0]?.body;
   }
 
   /** Change a note's words, or move a sticky note. */
-  update(flowId: string, noteId: string, patch: NotePatch): ReviewNote | undefined {
-    const file = this.read(flowId);
-    const note = file.notes.find((n) => n.id === noteId);
+  async update(flowId: string, noteId: string, patch: NotePatch): Promise<ReviewNote | undefined> {
+    const note = await this.get(flowId, noteId);
     if (!note) return undefined;
     if (patch.text !== undefined) note.text = patch.text;
     if (patch.sticky && patch.frame && note.sticky) {
       note.sticky = patch.sticky;
       note.frame = patch.frame;
     }
-    this.write(flowId, file);
-    return note;
+    return this.write(flowId, note);
   }
 
   /** Mark a note as dealt with. An agent says what it did in `reply`. */
-  resolve(flowId: string, noteId: string, by: "person" | "agent", reply?: string): ReviewNote | undefined {
-    const file = this.read(flowId);
-    const note = file.notes.find((n) => n.id === noteId);
+  async resolve(flowId: string, noteId: string, by: "person" | "agent", reply?: string): Promise<ReviewNote | undefined> {
+    const note = await this.get(flowId, noteId);
     if (!note) return undefined;
     note.done = { at: new Date().toISOString(), by };
     const said = clip(reply, 400);
     if (said) note.done.reply = said;
-    this.write(flowId, file);
-    return note;
+    return this.write(flowId, note);
   }
 
-  reopen(flowId: string, noteId: string): ReviewNote | undefined {
-    const file = this.read(flowId);
-    const note = file.notes.find((n) => n.id === noteId);
+  async reopen(flowId: string, noteId: string): Promise<ReviewNote | undefined> {
+    const note = await this.get(flowId, noteId);
     if (!note) return undefined;
     delete note.done;
-    this.write(flowId, file);
-    return note;
+    return this.write(flowId, note);
   }
 
-  remove(flowId: string, noteId: string): boolean {
-    const file = this.read(flowId);
-    const index = file.notes.findIndex((n) => n.id === noteId);
-    if (index === -1) return false;
-    file.notes.splice(index, 1);
-    this.write(flowId, file);
-    return true;
+  async remove(flowId: string, noteId: string): Promise<boolean> {
+    const rows = await query("delete from notes where ws = $1 and flow_id = $2 and id = $3 returning id", [this.ws, flowId, noteId]);
+    if (rows.length) await send(this.ws, { type: "notes", id: flowId });
+    return rows.length > 0;
   }
 }

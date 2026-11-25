@@ -1,8 +1,9 @@
 node_modules/
-# The copy of the viewer that is built for guests when sharing is turned on.
-dist/
-# Working data. The examples are copied in here on first start, and what you sketch stays on
-# your machine. To keep flows in git, point QUICKMOCK_FLOWS at a folder in your product's repo.
-flows/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.vercel
+.env*
+!.env.example
 .DS_Store
 *.log

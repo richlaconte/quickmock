@@ -12,17 +12,18 @@ import { noteAuthor, noteWhere, orphanedNotes } from "../shared/notes";
 import { PATCH_OPS_DOC, applyOps } from "../shared/patch";
 import type { FlowPayload, Issue, ReviewNote, ViewState } from "../shared/types";
 import { countIssues, formatIssue, validateFlow } from "../shared/validate";
+import { limitsFor } from "./limits";
 import type { NoteStore } from "./notes";
-import { slugify, type FlowStore } from "./store";
+import { StaleFlowError, slugify, type FlowStore } from "./store";
 
 export interface McpContext {
   store: FlowStore;
   /** Notes the person wrote in the viewer. */
   notes: NoteStore;
-  /** Where the viewer is served, e.g. http://localhost:4747 */
+  /** Where this workspace's viewer is served, e.g. https://quickmock.example/w/abc123 */
   baseUrl: string;
-  /** Latest state reported by an open viewer. */
-  view: () => ViewState | undefined;
+  /** Latest state reported by the owner's viewer. */
+  view: () => Promise<ViewState | undefined>;
   version: string;
 }
 
@@ -104,13 +105,13 @@ function ago(iso: string): string {
 export function buildMcpServer(ctx: McpContext): McpServer {
   const { store, notes, baseUrl } = ctx;
   /** A reminder for results that change or show a flow, when the person has notes waiting on it. */
-  const notesReminder = (flowId: string): string => {
-    const open = notes.open(flowId).length;
+  const notesReminder = async (flowId: string): Promise<string> => {
+    const open = (await notes.open(flowId)).length;
     return open ? `\n\nThere ${open === 1 ? "is" : "are"} ${plural(open, "open note")} on this flow. Read them with get_notes, and resolve the ones your changes deal with.` : "";
   };
-  const urlOf = (id: string): string => `${baseUrl}/#/f/${id}`;
-  const notFound = (id: string): string => {
-    const ids = store.ids();
+  const urlOf = (id: string): string => `${baseUrl}#/f/${id}`;
+  const notFound = async (id: string): Promise<string> => {
+    const ids = await store.ids();
     return `There is no flow "${id}". ${ids.length ? `Flows: ${ids.join(", ")}.` : "There are no flows yet: use create_flow."}`;
   };
 
@@ -150,12 +151,12 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const flows = store.list();
+      const flows = await store.list();
       if (flows.length === 0) return text(`No flows yet. Use create_flow. The viewer is at ${baseUrl}.`);
-      const lines = flows.map((f) =>
-        f.diskError
-          ? `- ${f.id}: cannot be read (${f.diskError})`
-          : `- ${f.id}: "${f.name}", ${f.device}, rev ${f.rev}, ${plural(f.screens, "screen")}, ${plural(f.states, "state")}, ${plural(f.transitions, "transition")}, ${plural(f.warnings, "warning")}, ${plural(notes.open(f.id).length, "open note")}. ${urlOf(f.id)}`,
+      const waiting = await notes.openCounts();
+      const lines = flows.map(
+        (f) =>
+          `- ${f.id}: "${f.name}", ${f.device}, rev ${f.rev}, ${plural(f.screens, "screen")}, ${plural(f.states, "state")}, ${plural(f.transitions, "transition")}, ${plural(f.warnings, "warning")}, ${plural(waiting.get(f.id) ?? 0, "open note")}. ${urlOf(f.id)}`,
       );
       return text([`${plural(flows.length, "flow")}:`, ...lines].join("\n"));
     },
@@ -174,9 +175,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ flow_id, screen }) => {
-      const payload = store.get(flow_id);
-      if (!payload) return text(notFound(flow_id), true);
-      const waiting = notes.open(flow_id).length;
+      const payload = await store.get(flow_id);
+      if (!payload) return text(await notFound(flow_id), true);
+      const waiting = (await notes.open(flow_id)).length;
       const header = `${flow_id}, rev ${payload.meta.rev}, ${sizeOf(payload)}${waiting ? `, ${plural(waiting, "open note")} (get_notes)` : ""}. ${urlOf(flow_id)}`;
       if (!screen) return text(`${header}\n${JSON.stringify(payload.spec)}`);
       const found = payload.spec.screens.find((s) => s.id === screen);
@@ -207,9 +208,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const result = validateFlow(asJson(flow));
       if (!result.flow) return text(rejection(result.issues), true);
 
+      const limits = limitsFor(store.ws);
+      if (JSON.stringify(result.flow).length > limits.specSize) {
+        return text("This flow is too large to save. Split it into smaller flows, one per journey.", true);
+      }
+
       const wanted = slugify(id ?? result.flow.name);
       let flowId = wanted;
-      const exists = store.has(wanted);
+      const exists = await store.has(wanted);
       if (exists && !overwrite) {
         if (id) {
           return text(
@@ -217,16 +223,26 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             true,
           );
         }
-        flowId = store.freeId(wanted);
+        flowId = await store.freeId(wanted);
       }
-      const payload = store.save(flowId, result.flow, result.issues, exists && overwrite ? "Replaced the whole flow" : "Created");
+      const replaced = exists && overwrite ? await store.get(flowId) : undefined;
+      if (!replaced && (await store.count()) >= limits.flows) {
+        return text(`This workspace already has ${limits.flows} flows, which is the most it can hold. Change one with patch_flow, or replace one by passing its id and "overwrite": true.`, true);
+      }
+      let payload: FlowPayload;
+      try {
+        payload = await store.save(flowId, result.flow, result.issues, replaced ? "Replaced the whole flow" : "Created", replaced);
+      } catch (error) {
+        if (!(error instanceof StaleFlowError)) throw error;
+        return text(`Nothing was saved: "${flowId}" was changed by someone else at the same moment. Read it again with get_flow and retry.`, true);
+      }
       return text(
         [
-          `${exists && overwrite ? "Replaced" : "Created"} "${payload.spec.name}" as ${flowId} (rev ${payload.meta.rev}): ${sizeOf(payload)}.`,
+          `${replaced ? "Replaced" : "Created"} "${payload.spec.name}" as ${flowId} (rev ${payload.meta.rev}): ${sizeOf(payload)}.`,
           `Board and prototype: ${urlOf(flowId)}`,
           "",
           lintBlock(payload.issues),
-        ].join("\n") + notesReminder(flowId),
+        ].join("\n") + (await notesReminder(flowId)),
       );
     },
   );
@@ -245,14 +261,23 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       },
     },
     async ({ flow_id, summary, ops }) => {
-      const current = store.get(flow_id);
-      if (!current) return text(notFound(flow_id), true);
+      const current = await store.get(flow_id);
+      if (!current) return text(await notFound(flow_id), true);
       const patched = applyOps(current.spec, asJson(ops));
       if (!patched.ok) return text(`Nothing was changed. ${patched.error}`, true);
       const result = validateFlow(patched.flow);
       if (!result.flow) return text(rejection(result.issues), true);
 
-      const payload = store.save(flow_id, result.flow, result.issues, summary.trim() || "Changed");
+      if (JSON.stringify(result.flow).length > limitsFor(store.ws).specSize) {
+        return text("Nothing was changed: the flow would be too large to save. Split it into smaller flows, one per journey.", true);
+      }
+      let payload: FlowPayload;
+      try {
+        payload = await store.save(flow_id, result.flow, result.issues, summary.trim() || "Changed", current);
+      } catch (error) {
+        if (!(error instanceof StaleFlowError)) throw error;
+        return text(`Nothing was changed: ${flow_id} was changed by someone else at the same moment. Read it again with get_flow and send the patch again.`, true);
+      }
       const change = payload.meta.lastChange;
       const parts: string[] = [];
       if (change?.added.length) parts.push(`added ${change.added.join(", ")}`);
@@ -264,7 +289,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           `Board and prototype: ${urlOf(flow_id)}`,
           "",
           lintBlock(payload.issues),
-        ].join("\n") + notesReminder(flow_id),
+        ].join("\n") + (await notesReminder(flow_id)),
       );
     },
   );
@@ -281,10 +306,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ flow_id }) => {
-      const payload = store.get(flow_id);
-      if (!payload) return text(notFound(flow_id), true);
-      const extra = payload.diskError ? `\nNote: the file on disk is currently unreadable (${payload.diskError}); this is the last good version.` : "";
-      return text(`${flow_id}, rev ${payload.meta.rev}.\n${lintBlock(payload.issues, 200)}${extra}`);
+      const payload = await store.get(flow_id);
+      if (!payload) return text(await notFound(flow_id), true);
+      return text(`${flow_id}, rev ${payload.meta.rev}.\n${lintBlock(payload.issues, 200)}`);
     },
   );
 
@@ -298,7 +322,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const view = ctx.view();
+      const view = await ctx.view();
       if (!view) {
         return text(`No viewer has reported anything yet. Ask the person to open ${baseUrl}, choose a flow and click the frame they mean.`);
       }
@@ -316,7 +340,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         lines.push(`data: ${JSON.stringify(view.prototype.data)}`);
       }
       const inView = view.selectedFrame ?? view.prototype?.current;
-      const open = notes.open(view.flowId);
+      const open = await notes.open(view.flowId);
       const here = open.filter((note) => note.frame === inView);
       if (here.length) {
         lines.push(`open notes on ${inView}:`, ...here.map((note) => noteLine(note, new Set())));
@@ -340,8 +364,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ flow_id, target, screen }) => {
-      const payload = store.get(flow_id);
-      if (!payload) return text(notFound(flow_id), true);
+      const payload = await store.get(flow_id);
+      if (!payload) return text(await notFound(flow_id), true);
       if (target && !TARGET_IDS.includes(target)) {
         return text(`"${target}" is not a build target. Targets: ${TARGET_IDS.join(", ")}.`, true);
       }
@@ -352,7 +376,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const open = c.warnings
         ? `\n\nNote: this flow still has ${plural(c.warnings, "lint warning")}. They are holes in the flow, so settle them (lint_flow) before building from this brief.`
         : "";
-      return text(renderBuildBrief(payload.spec, { target, screen, url: urlOf(flow_id), notes: notes.open(flow_id) }) + open);
+      return text(renderBuildBrief(payload.spec, { target, screen, url: urlOf(flow_id), notes: await notes.open(flow_id) }) + open);
     },
   );
 
@@ -369,9 +393,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ flow_id, include_done }) => {
-      const payload = store.get(flow_id);
-      if (!payload) return text(notFound(flow_id), true);
-      const all = notes.list(flow_id);
+      const payload = await store.get(flow_id);
+      if (!payload) return text(await notFound(flow_id), true);
+      const all = await notes.list(flow_id);
       const open = all.filter((note) => !note.done);
       const gone = orphanedNotes(payload.spec, all);
       if (all.length === 0) {
@@ -416,7 +440,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       },
     },
     async ({ flow_id, notes: resolved }) => {
-      if (!store.get(flow_id)) return text(notFound(flow_id), true);
+      if (!await store.get(flow_id)) return text(await notFound(flow_id), true);
       const done: string[] = [];
       const missing: string[] = [];
       const empty: string[] = [];
@@ -425,10 +449,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           empty.push(item.id);
           continue;
         }
-        if (notes.resolve(flow_id, item.id, "agent", item.reply)) done.push(item.id);
+        if (await notes.resolve(flow_id, item.id, "agent", item.reply)) done.push(item.id);
         else missing.push(item.id);
       }
-      const left = notes.open(flow_id);
+      const left = await notes.open(flow_id);
       const parts: string[] = [];
       if (done.length) parts.push(`Marked ${done.join(", ")} as done.`);
       if (missing.length) parts.push(`No such note: ${missing.join(", ")}. get_notes lists the ids.`);

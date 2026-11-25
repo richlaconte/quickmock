@@ -1,206 +1,183 @@
-// The HTTP API behind the viewer. There are two doors onto it: the owner's,
-// which only this computer can reach, and the guests', which is what a share
-// link opens. Both get the same router with a different role.
+// The HTTP API behind the viewer, for one workspace: /api/w/<workspace>/...
 //
-// Guests can read flows, see who is here, and write notes. They cannot change
-// the notes of the person who shared the board, start or stop sharing, or feed
-// the agent's get_selection. The agent endpoint itself is not in this router
-// at all, so it never appears on the guests' door.
+// Two kinds of people reach it. The owner carries the secret from the owner
+// link; guests carry the key from a share link. Guests can read flows, see who
+// is here, and write notes. They cannot change the owner's notes, start or
+// stop sharing, make an agent key, or feed the agent's get_selection. Changing
+// a flow is not here at all: only an agent does that, over /mcp.
 
-import { Router, type Request, type Response } from "express";
+import { after, type NextRequest } from "next/server";
 
 import { TARGET_IDS } from "../design-system/targets";
 import { renderBuildBrief } from "../shared/brief";
 import { frameRefs } from "../shared/machine";
 import type { Role, ShareStatus, ViewState } from "../shared/types";
-import type { Hub } from "./hub";
-import { NOTES_PER_FLOW, readNoteInput, readNotePatch, type NoteStore } from "./notes";
-import type { FlowStore } from "./store";
+import * as hub from "./hub";
+import { limitsFor } from "./limits";
+import { NoteStore, readNoteInput, readNotePatch } from "./notes";
+import { FlowStore } from "./store";
+import { ownerCookie, roleOf, rotateAgentKey, setSharing, shareKey } from "./workspaces";
 
-export interface ApiContext {
-  store: FlowStore;
-  notes: NoteStore;
-  hub: Hub;
-  /** Where the owner's viewer is served, for the links an agent is given. */
-  baseUrl: string;
-  /** Owner's door only: remember what the owner is looking at. */
-  setView?: (view: ViewState) => void;
-  /** Owner's door only: turn sharing on and off. */
-  share?: { status: () => ShareStatus; start: () => Promise<ShareStatus>; stop: () => Promise<ShareStatus> };
+const json = (body: unknown, status = 200): Response => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+const plain = (body: string, status = 200): Response =>
+  new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+const empty = (): Response => new Response(null, { status: 204 });
+
+/** JSON only. A page on another site cannot send JSON here with the owner's cookie, so it cannot write anything. */
+async function readJson(request: NextRequest): Promise<unknown> {
+  if (!(request.headers.get("content-type") ?? "").includes("application/json")) return undefined;
+  const text = await request.text();
+  if (text.length > 64 * 1024) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
-export function createApi(ctx: ApiContext, role: Role): Router {
-  const { store, notes, hub } = ctx;
-  const api = Router();
+export async function handleApi(request: NextRequest, ws: string, path: string[]): Promise<Response> {
+  const cookie = (name: string): string | undefined => request.cookies.get(name)?.value;
+  const role = await roleOf(ws, cookie);
+  if (!role) return json({ error: "This workspace is opened by link. Open the full link you were sent." }, 401);
+
   const guest = role === "guest";
+  const method = request.method;
+  const origin = request.nextUrl.origin;
+  const home = `${origin}/w/${ws}`;
+  const store = new FlowStore(ws);
+  const notes = new NoteStore(ws);
+  const [first, flowId, third, noteId] = path;
+  const is = (verb: string, ...parts: (string | undefined)[]): boolean =>
+    method === verb && path.length === parts.length && parts.every((part, i) => part === undefined || part === path[i]);
 
-  const noFlow = (res: Response, id: string): void => {
-    res.status(404).json({ error: `There is no flow "${id}".` });
+  const shareStatus = async (): Promise<ShareStatus> => {
+    const key = await shareKey(ws);
+    return key ? { on: true, link: `${home}?key=${key}` } : { on: false };
   };
-  // JSON only. A page on another site cannot send JSON here without being let in first, so it cannot write anything.
-  const isJson = (req: Request): boolean => Boolean(req.is("application/json"));
+  const noFlow = (): Response => json({ error: `There is no flow "${flowId}".` }, 404);
 
-  api.get("/session", (_req, res) => {
-    res.json(guest ? { role } : { role, share: ctx.share?.status() });
-  });
+  if (is("GET", "session")) {
+    if (guest) return json({ role });
+    // The owner link is how the owner gets back in from another browser, so they can always read it here.
+    return json({ role, ownerLink: `${home}?owner=${cookie(ownerCookie(ws))}`, share: await shareStatus(), limits: limitsFor(ws) });
+  }
 
   // ── flows: read only, for everyone ─────────────────────────────────────────
 
-  api.get("/flows", (_req, res) => {
-    res.json(guest ? { flows: store.list() } : { flows: store.list(), baseUrl: ctx.baseUrl });
-  });
+  if (is("GET", "flows")) return json({ flows: await store.list() });
 
-  api.get("/flows/:id", (req, res) => {
-    const payload = store.get(req.params.id);
-    if (!payload) return noFlow(res, req.params.id);
-    res.json(payload);
-  });
+  if (is("GET", "flows", undefined)) {
+    const payload = await store.get(flowId);
+    return payload ? json(payload) : noFlow();
+  }
 
-  // The build brief as Markdown: curl it into a file, or read it on the viewer's brief page.
-  api.get("/flows/:id/brief", (req, res) => {
-    const payload = store.get(req.params.id);
-    if (!payload) {
-      res.status(404).type("text/plain").send(`There is no flow "${req.params.id}".`);
-      return;
-    }
-    const target = typeof req.query.target === "string" ? req.query.target : undefined;
-    const screen = typeof req.query.screen === "string" ? req.query.screen : undefined;
-    if (target && !TARGET_IDS.includes(target)) {
-      res.status(400).type("text/plain").send(`"${target}" is not a build target. Targets: ${TARGET_IDS.join(", ")}.`);
-      return;
-    }
-    if (screen && !payload.spec.screens.some((s) => s.id === screen)) {
-      res.status(400).type("text/plain").send(`Flow "${req.params.id}" has no screen "${screen}".`);
-      return;
-    }
-    const brief = renderBuildBrief(payload.spec, {
-      target,
-      screen,
-      url: guest ? undefined : `${ctx.baseUrl}/#/f/${req.params.id}`,
-      notes: notes.open(req.params.id),
-    });
-    // Plain text, so a browser shows it instead of offering a download.
-    res.type("text/plain; charset=utf-8").send(brief);
-  });
+  // The build brief as Markdown.
+  if (is("GET", "flows", undefined, "brief")) {
+    const payload = await store.get(flowId);
+    if (!payload) return plain(`There is no flow "${flowId}".`, 404);
+    const target = request.nextUrl.searchParams.get("target") ?? undefined;
+    const screen = request.nextUrl.searchParams.get("screen") ?? undefined;
+    if (target && !TARGET_IDS.includes(target)) return plain(`"${target}" is not a build target. Targets: ${TARGET_IDS.join(", ")}.`, 400);
+    if (screen && !payload.spec.screens.some((s) => s.id === screen)) return plain(`Flow "${flowId}" has no screen "${screen}".`, 400);
+    return plain(renderBuildBrief(payload.spec, { target, screen, url: `${home}#/f/${flowId}`, notes: await notes.open(flowId) }));
+  }
 
   // ── notes and sticky notes ─────────────────────────────────────────────────
 
-  api.get("/flows/:id/notes", (req, res) => {
-    if (!store.get(req.params.id)) return noFlow(res, req.params.id);
-    res.json({ notes: notes.list(req.params.id) });
-  });
+  if (first === "flows" && third === "notes" && path.length === 3) {
+    const payload = await store.get(flowId);
+    if (!payload) return noFlow();
+    if (method === "GET") return json({ notes: await notes.list(flowId) });
+    if (method === "POST") {
+      const body = await readJson(request);
+      const input = body === undefined ? "Send the note as JSON." : readNoteInput(body);
+      if (typeof input === "string") return json({ error: input }, 400);
+      if (!frameRefs(payload.spec).includes(input.frame)) return json({ error: `This flow has no frame "${input.frame}".` }, 400);
+      const note = await notes.add(flowId, input, guest);
+      if (!note) return json({ error: `This flow already has ${limitsFor(ws).notesPerFlow} notes. Delete some before adding more.` }, 409);
+      return json({ note }, 201);
+    }
+  }
 
-  api.post("/flows/:id/notes", (req, res) => {
-    const payload = store.get(req.params.id);
-    if (!payload) return noFlow(res, req.params.id);
-    const input = isJson(req) ? readNoteInput(req.body) : "Send the note as JSON.";
-    if (typeof input === "string") {
-      res.status(400).json({ error: input });
-      return;
-    }
-    if (!frameRefs(payload.spec).includes(input.frame)) {
-      res.status(400).json({ error: `This flow has no frame "${input.frame}".` });
-      return;
-    }
-    const note = notes.add(req.params.id, input, guest);
-    if (!note) {
-      res.status(409).json({ error: `This flow already has ${NOTES_PER_FLOW} notes. Delete some before adding more.` });
-      return;
-    }
-    res.status(201).json({ note });
-  });
+  if (first === "flows" && third === "notes" && path.length === 4 && (method === "PATCH" || method === "DELETE")) {
+    const payload = await store.get(flowId);
+    const note = payload ? await notes.get(flowId, noteId) : undefined;
+    if (!payload || !note) return json({ error: `There is no note "${noteId}" on this flow.` }, 404);
+    if (guest && !note.guest) return json({ error: "Only the person who shared this board can change their own notes." }, 403);
 
-  /** The note a request is about, if this door may change it. Answers the request itself when it may not. */
-  const editable = (req: Request<{ id: string; noteId: string }>, res: Response): boolean => {
-    const note = store.get(req.params.id) ? notes.get(req.params.id, req.params.noteId) : undefined;
-    if (!note) {
-      res.status(404).json({ error: `There is no note "${req.params.noteId}" on this flow.` });
-      return false;
+    if (method === "DELETE") {
+      await notes.remove(flowId, noteId);
+      return empty();
     }
-    if (guest && !note.guest) {
-      res.status(403).json({ error: "Only the person who shared this board can change their own notes." });
-      return false;
-    }
-    return true;
-  };
-
-  api.patch("/flows/:id/notes/:noteId", (req, res) => {
-    if (!editable(req, res)) return;
-    if (!isJson(req)) {
-      res.status(400).json({ error: "Send the change as JSON." });
-      return;
-    }
-    const { id, noteId } = req.params;
-    const done = (req.body as { done?: unknown }).done;
+    const body = await readJson(request);
+    if (body === undefined) return json({ error: "Send the change as JSON." }, 400);
+    const done = (body as { done?: unknown } | null)?.done;
     if (typeof done === "boolean") {
-      res.json({ note: done ? notes.resolve(id, noteId, "person") : notes.reopen(id, noteId) });
-      return;
+      return json({ note: done ? await notes.resolve(flowId, noteId, "person") : await notes.reopen(flowId, noteId) });
     }
-    const patch = readNotePatch(req.body);
-    if (typeof patch === "string") {
-      res.status(400).json({ error: patch });
-      return;
-    }
-    const frames = frameRefs(store.get(id)!.spec);
-    if (patch.frame && !frames.includes(patch.frame)) {
-      res.status(400).json({ error: `This flow has no frame "${patch.frame}".` });
-      return;
-    }
-    res.json({ note: notes.update(id, noteId, patch) });
-  });
-
-  api.delete("/flows/:id/notes/:noteId", (req, res) => {
-    if (!editable(req, res)) return;
-    notes.remove(req.params.id, req.params.noteId);
-    res.status(204).end();
-  });
+    const patch = readNotePatch(body);
+    if (typeof patch === "string") return json({ error: patch }, 400);
+    if (patch.frame && !frameRefs(payload.spec).includes(patch.frame)) return json({ error: `This flow has no frame "${patch.frame}".` }, 400);
+    return json({ note: await notes.update(flowId, noteId, patch) });
+  }
 
   // ── live: one event stream per page, and what each page reports back ───────
 
-  api.get("/events", (req, res) => {
-    const client = typeof req.query.client === "string" ? req.query.client : undefined;
-    hub.open(req, res, client, role);
-  });
-
-  api.post("/presence", (req, res) => {
-    const body = req.body as { client?: unknown } | undefined;
-    if (!isJson(req) || !hub.update(body?.client, body, role)) {
-      res.status(400).json({ error: "Send who you are as JSON, with the \"client\" id your page chose." });
-      return;
-    }
-    res.status(204).end();
-  });
-
-  // ── the owner's door only ──────────────────────────────────────────────────
-
-  if (!guest) {
-    // What the owner is looking at, so their agent can resolve "this". Guests clicking around must not change it.
-    api.post("/view", (req, res) => {
-      const body = req.body as Partial<ViewState> | undefined;
-      if (isJson(req) && body && typeof body.flowId === "string") {
-        ctx.setView?.({ ...body, flowId: body.flowId, at: new Date().toISOString() } as ViewState);
-      }
-      res.status(204).end();
-    });
-
-    api.get("/share", (_req, res) => {
-      res.json(ctx.share?.status() ?? { on: false, starting: false, links: [] });
-    });
-
-    api.post("/share", async (req, res) => {
-      const on = (req.body as { on?: unknown } | undefined)?.on;
-      if (!isJson(req) || typeof on !== "boolean" || !ctx.share) {
-        res.status(400).json({ error: `Send {"on": true} or {"on": false}.` });
-        return;
-      }
-      res.json(on ? await ctx.share.start() : await ctx.share.stop());
+  if (is("GET", "events")) {
+    const client = request.nextUrl.searchParams.get("client") ?? undefined;
+    const { stream, closed } = hub.openStream(ws, client, role, request.signal, async () => Boolean(await roleOf(ws, cookie, true)));
+    // Keep the function alive after the page goes, long enough to take the person off the list.
+    after(() => closed.catch(() => undefined));
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        // Proxies must not hold the stream back.
+        "X-Accel-Buffering": "no",
+      },
     });
   }
 
-  // Anything else under /api does not exist. Say so as JSON, before a viewer's catch-all answers with a page.
-  api.use((_req, res) => {
-    res.status(404).json({ error: "There is no such endpoint." });
-  });
+  if (is("POST", "presence")) {
+    const body = (await readJson(request)) as { client?: unknown } | undefined;
+    if (!body || !(await hub.update(ws, body.client, body, role))) {
+      return json({ error: 'Send who you are as JSON, with the "client" id your page chose.' }, 400);
+    }
+    return empty();
+  }
 
-  return api;
+  // ── the owner only ─────────────────────────────────────────────────────────
+
+  if (!guest) {
+    // What the owner is looking at, so their agent can resolve "this". Guests clicking around must not change it.
+    if (is("POST", "view")) {
+      const body = (await readJson(request)) as Partial<ViewState> | undefined;
+      if (body && typeof body.flowId === "string") {
+        await hub.setView(ws, { ...body, flowId: body.flowId, at: new Date().toISOString() } as ViewState);
+      }
+      return empty();
+    }
+
+    if (is("GET", "share")) return json(await shareStatus());
+
+    if (is("POST", "share")) {
+      const on = ((await readJson(request)) as { on?: unknown } | undefined)?.on;
+      if (typeof on !== "boolean") return json({ error: 'Send {"on": true} or {"on": false}.' }, 400);
+      await setSharing(ws, on);
+      // Guests on the old link are let go, and the owner's other pages redraw the share panel.
+      await hub.recheckGuests(ws);
+      await hub.send(ws, { type: "share" }, { owners: true });
+      return json(await shareStatus());
+    }
+
+    // A new agent key. The old one stops working, so this is also how a leaked key is taken back.
+    if (is("POST", "key")) {
+      if ((await readJson(request)) === undefined) return json({ error: "Send an empty JSON object." }, 400);
+      return json({ agentKey: await rotateAgentKey(ws) });
+    }
+  }
+
+  // Anything else under /api does not exist.
+  return json({ error: "There is no such endpoint." }, 404);
 }

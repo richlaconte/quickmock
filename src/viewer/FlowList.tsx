@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import type { FlowSummary } from "../shared/types";
-import { getFlows, useServerEvents } from "./api";
+import { getFlows, getSession, newAgentKey, rememberedAgentKey, useServerEvents, type Session } from "./api";
 import { usePresence } from "./live";
 import { PeopleBar } from "./People";
 import { links } from "./router";
+import { CopyRow } from "./SharePanel";
 
 function when(iso: string): string {
   if (!iso) return "";
@@ -19,7 +20,9 @@ function when(iso: string): string {
 
 export function FlowList(): ReactElement {
   const [flows, setFlows] = useState<FlowSummary[] | null>(null);
-  const [baseUrl, setBaseUrl] = useState(window.location.origin);
+  const [session, setSession] = useState<Session | null>(null);
+  const [agentKey, setAgentKey] = useState(rememberedAgentKey);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -27,7 +30,6 @@ export function FlowList(): ReactElement {
     getFlows().then(
       (result) => {
         setFlows(result.flows);
-        if (result.baseUrl) setBaseUrl(result.baseUrl);
         setError(null);
       },
       (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
@@ -37,9 +39,18 @@ export function FlowList(): ReactElement {
   useServerEvents((event) => {
     if (event.type === "list" || event.type === "flow") load();
   });
-  const { role } = usePresence();
+  useEffect(() => {
+    getSession().then(setSession, () => undefined);
+  }, []);
+  const presence = usePresence();
+  const role = session?.role ?? presence.role;
 
-  const command = `claude mcp add --transport http quickmock ${baseUrl}/mcp`;
+  const makeKey = (): void => {
+    setKeyError(null);
+    newAgentKey().then(setAgentKey, (e: unknown) => setKeyError(e instanceof Error ? e.message : String(e)));
+  };
+
+  const command = `claude mcp add --transport http quickmock ${window.location.origin}/mcp --header "Authorization: Bearer ${agentKey ?? "qm_..."}"`;
   const copy = (): void => {
     void navigator.clipboard?.writeText(command).then(() => {
       setCopied(true);
@@ -69,12 +80,6 @@ export function FlowList(): ReactElement {
           <ul className="flow-list">
             {(flows ?? []).map((flow) => (
               <li key={flow.id}>
-                {flow.diskError ? (
-                  <div className="flow-row is-broken">
-                    <span className="flow-title">{flow.id}</span>
-                    <span className="flow-desc">{flow.diskError}</span>
-                  </div>
-                ) : (
                   <a className="flow-row" href={links.flow(flow.id)}>
                     <span className="flow-title">{flow.name}</span>
                     {flow.description && <span className="flow-desc">{flow.description}</span>}
@@ -88,7 +93,6 @@ export function FlowList(): ReactElement {
                       <span>{when(flow.updatedAt)}</span>
                     </span>
                   </a>
-                )}
               </li>
             ))}
           </ul>
@@ -103,16 +107,44 @@ export function FlowList(): ReactElement {
         ) : (
           <aside className="home-connect" aria-labelledby="connect-heading">
             <h2 id="connect-heading">Connect an agent</h2>
-            <p>Run this once in a terminal. It adds quickmock to Claude Code for the project you are in.</p>
-            <pre className="command">
-              <code>{command}</code>
-            </pre>
-            <button type="button" className="bar-button" onClick={copy}>
-              {copied ? "Copied" : "Copy command"}
-            </button>
+            {agentKey ? (
+              <>
+                <p>Run this once in a terminal. It adds this workspace to Claude Code for the project you are in.</p>
+                <pre className="command">
+                  <code>{command}</code>
+                </pre>
+                <button type="button" className="bar-button" onClick={copy}>
+                  {copied ? "Copied" : "Copy command"}
+                </button>
+                <p className="quiet">The key in it is shown only in this tab. Anyone who has it can change the flows here, so treat it like a password.</p>
+              </>
+            ) : (
+              <>
+                <p>An agent gets in with this workspace's key. It is shown once, when it is made, so there is none to show you now.</p>
+                <button type="button" className="bar-button" onClick={makeKey}>
+                  Make a new key
+                </button>
+                <p className="quiet">The key in use until now stops working, so an agent that is already connected has to be added again.</p>
+              </>
+            )}
+            {keyError && (
+              <p className="note-error" role="alert">
+                {keyError}
+              </p>
+            )}
             <p>Then ask for a flow in plain words:</p>
             <p className="ask">Use quickmock to sketch a password reset flow for a mobile app, with the unhappy paths.</p>
             <p>The board fills in here while the agent works. Click a frame, say “this”, and the agent knows which one you mean.</p>
+            {session?.ownerLink && (
+              <>
+                <h2>Your way back in</h2>
+                <p>
+                  There are no accounts. This link is what makes the workspace yours: this browser remembers it, and it is how you open the workspace
+                  anywhere else. Keep it somewhere safe and do not share it.
+                </p>
+                <CopyRow label="Link" value={session.ownerLink} />
+              </>
+            )}
           </aside>
         )}
       </main>

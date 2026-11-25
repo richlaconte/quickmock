@@ -105,8 +105,6 @@ export interface FlowSummary {
   transitions: number;
   errors: number;
   warnings: number;
-  /** Set when the file on disk cannot be read as a valid flow. */
-  diskError?: string;
 }
 
 export interface FlowPayload {
@@ -114,8 +112,6 @@ export interface FlowPayload {
   spec: Flow;
   meta: FlowMeta;
   issues: Issue[];
-  /** Set when the file on disk could not be read; `spec` is then the last good version. */
-  diskError?: string;
 }
 
 /**
@@ -139,14 +135,14 @@ export interface ReviewNote {
   text: string;
   /** Who wrote it, as they named themselves in the viewer. */
   author?: string;
-  /** True when it came in over the share link, not from the person running quickmock. */
+  /** True when it came in over the share link, not from the workspace's owner. */
   guest?: boolean;
   at: string;
   /** Set once the note has been dealt with, by the person or by an agent. */
   done?: { at: string; by: "person" | "agent"; reply?: string };
 }
 
-/** Who a viewer is to this quickmock: the person running it, or someone who opened the share link. */
+/** Who a viewer is to a workspace: the person who made it, or someone who opened the share link. */
 export type Role = "owner" | "guest";
 
 /** Someone who has the viewer open right now. */
@@ -163,17 +159,11 @@ export interface Person {
   frame?: string;
 }
 
-/** Sharing: whether other people can open this quickmock, and the links that let them. */
+/** Sharing: whether other people can open this workspace, and the link that lets them. */
 export interface ShareStatus {
   on: boolean;
-  /** True while the shared copy of the viewer is being built. */
-  starting: boolean;
-  port?: number;
-  /** The key every guest link carries. */
-  key?: string;
-  /** Guest links: for this computer, then one per network address. */
-  links: { label: string; url: string }[];
-  error?: string;
+  /** The guest link, while sharing is on. */
+  link?: string;
 }
 
 /** What the server pushes to every open viewer. */

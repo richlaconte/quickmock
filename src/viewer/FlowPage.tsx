@@ -136,7 +136,7 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
   );
 
   // Report what is on screen, so the agent's get_selection tool can answer "this".
-  // Only for the person running quickmock: a guest's clicks are not what their agent means by "this".
+  // Only for the workspace's owner: a guest's clicks are not what their agent means by "this".
   useEffect(() => {
     if (role === "guest") return;
     const timer = setTimeout(() => {
@@ -178,11 +178,6 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
         </a>
         {role === "owner" && <ShareButton flowId={payload.id} />}
       </header>
-      {payload.diskError && (
-        <p className="banner" role="alert">
-          The file on disk cannot be read, so this is the last good version. {payload.diskError}
-        </p>
-      )}
       <div className={cx("workspace-main", mode === "board" && "is-board-only")}>
         <div className="board-wrap">
           <div className="board-area">

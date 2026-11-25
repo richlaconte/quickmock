@@ -2171,3 +2171,123 @@ a.flow-row:hover {
     overflow-x: auto;
   }
 }
+
+/* ── the site: front door and locked page ─────────────────────────────────── */
+
+.landing {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-main {
+  width: 100%;
+  max-width: 860px;
+  padding: 56px 32px 72px;
+}
+
+.landing-main h1 {
+  margin: 0 0 18px;
+  max-width: 18ch;
+  font-family: var(--qm-font-hand);
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 1.12;
+}
+
+.landing-lede {
+  margin: 0 0 28px;
+  max-width: 62ch;
+  font-size: 17px;
+}
+
+.landing-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 44px;
+}
+
+.landing-start .note-error,
+.landing-mine {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.bar-button.landing-button {
+  padding: 9px 18px;
+  font-size: 16px;
+  background: var(--qm-ink);
+  color: var(--qm-paper);
+}
+
+.landing-mine h2,
+.landing-steps h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.landing-mine ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 40px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  border-top: 1px solid var(--qm-ink);
+}
+
+.landing-steps li {
+  position: relative;
+  padding: 16px 0 16px 38px;
+  border-bottom: 1px solid var(--qm-ink);
+  counter-increment: step;
+}
+
+.landing-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  font-family: var(--qm-font-hand);
+  font-size: 26px;
+}
+
+.landing-steps p {
+  margin: 0;
+}
+
+.locked {
+  max-width: 34em;
+  margin: 12vh auto;
+  padding: 0 20px;
+}
+
+.locked h1 {
+  font-size: 20px;
+}
+
+@media (max-width: 720px) {
+  .landing-main {
+    padding: 32px 20px 48px;
+  }
+
+  .landing-main h1 {
+    font-size: 34px;
+  }
+
+  .landing-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -31,13 +27,9 @@ import {
 } from "../src/shared/machine";
 import { noteAuthor, noteWhere, openNotes, orphanedNotes } from "../src/shared/notes";
 import { diffFlows } from "../src/shared/patch";
-import type { Flow, FlowNode, Issue, ReviewNote, ServerEvent } from "../src/shared/types";
+import type { Flow, FlowNode, Issue, ReviewNote } from "../src/shared/types";
 import { countIssues, formatIssue, validateFlow } from "../src/shared/validate";
-import { createApi } from "../src/server/api";
-import { Hub } from "../src/server/hub";
-import { NOTE_MAX_LENGTH, NOTES_PER_FLOW, NoteStore, readNoteInput, readNotePatch } from "../src/server/notes";
-import { guestApp } from "../src/server/share";
-import { FlowStore } from "../src/server/store";
+import { NOTE_MAX_LENGTH, readNoteInput, readNotePatch } from "../src/server/notes";
 import { computeBoard } from "../src/viewer/Board";
 import { STICKY_WIDTH, anchorFor, initials, stickyPosition } from "../src/viewer/BoardLive";
 import { Device, RENDERERS, STATIC_CONTEXT, StateLayout } from "../src/viewer/kit/render";
@@ -519,45 +511,6 @@ test("every component and pattern specimen renders", () => {
 
 // ── notes the person writes in the viewer ───────────────────────────────────
 
-test("notes are kept beside the flow, with ids that are never reused", () => {
-  const dir = mkdtempSync(join(tmpdir(), "quickmock-notes-"));
-  const store = new NoteStore(dir);
-  const events: unknown[] = [];
-  store.on("change", (event) => events.push(event));
-
-  const first = store.add("team", { frame: "team.default", text: "Move the seat count up" })!;
-  const second = store.add("team", {
-    frame: "team.default",
-    text: "Make this secondary",
-    target: { path: "layout[1].children[1]", type: "button", summary: "Invite someone" },
-  })!;
-  assert.deepEqual([first.id, second.id], ["n1", "n2"]);
-  assert.equal(store.open("team").length, 2);
-  assert.deepEqual(store.list("other"), [], "each flow has its own notes");
-
-  const resolved = store.resolve("team", "n2", "agent", "  Changed it to the default button.  ");
-  assert.equal(resolved?.done?.by, "agent");
-  assert.equal(resolved?.done?.reply, "Changed it to the default button.");
-  assert.deepEqual(store.open("team").map((n) => n.id), ["n1"]);
-  assert.equal(store.resolve("team", "n9", "agent", "x"), undefined);
-
-  assert.equal(store.reopen("team", "n2")?.done, undefined);
-  assert.equal(store.remove("team", "n2"), true);
-  assert.equal(store.remove("team", "n2"), false);
-  assert.equal(store.add("team", { frame: "team.empty", text: "Third" })?.id, "n3", "a deleted note's id is not handed out again");
-  assert.equal(events.length, 6, "every change is announced, so open pages update");
-
-  // The file on disk is the whole truth: a new process reads the same notes.
-  const reopened = new NoteStore(dir);
-  assert.deepEqual(reopened.list("team").map((n) => [n.id, n.frame, n.text]), [
-    ["n1", "team.default", "Move the seat count up"],
-    ["n3", "team.empty", "Third"],
-  ]);
-  assert.equal(reopened.add("team", { frame: "team.default", text: "Fourth" })?.id, "n4");
-  assert.ok(existsSync(join(dir, ".notes", "team.json")), "notes live in the flows folder's .notes");
-  rmSync(dir, { recursive: true, force: true });
-});
-
 test("what a client sends is tidied into a note, or refused with a reason", () => {
   assert.deepEqual(readNoteInput({ frame: " team.default ", text: "  Too many buttons  " }), { frame: "team.default", text: "Too many buttons" });
   assert.deepEqual(readNoteInput({ frame: "team.default", text: "x", target: { path: "layout[0]", type: "nav", summary: "", extra: 1 } }), {
@@ -613,26 +566,6 @@ test("open notes are written under their frame on the board and listed in the bu
 
 // ── sticky notes ────────────────────────────────────────────────────────────
 
-test("a sticky note keeps its place beside a frame, and can be moved and rewritten", () => {
-  const dir = mkdtempSync(join(tmpdir(), "quickmock-sticky-"));
-  const store = new NoteStore(dir);
-  const sticky = store.add("team", { frame: "team.default", text: "Drawer instead?", sticky: { dx: -240, dy: 30 }, author: "Lena" }, true)!;
-  assert.deepEqual([sticky.sticky, sticky.author, sticky.guest], [{ dx: -240, dy: 30 }, "Lena", true]);
-  const plain = store.add("team", { frame: "team.default", text: "From the owner" })!;
-  assert.equal(plain.guest, undefined, "only notes from the share link are marked as a guest's");
-
-  assert.equal(store.update("team", sticky.id, { text: "Drawer instead of a modal?" })?.text, "Drawer instead of a modal?");
-  const moved = store.update("team", sticky.id, { frame: "team.empty", sticky: { dx: 12, dy: 400 } });
-  assert.deepEqual([moved?.frame, moved?.sticky], ["team.empty", { dx: 12, dy: 400 }]);
-  // An ordinary note is tied to its frame: a move is not something it has.
-  assert.equal(store.update("team", plain.id, { frame: "team.empty", sticky: { dx: 1, dy: 1 } })?.frame, "team.default");
-  assert.equal(store.update("team", "n99", { text: "x" }), undefined);
-
-  for (let i = store.list("team").length; i < NOTES_PER_FLOW; i++) store.add("team", { frame: "team.default", text: `Note ${i}` });
-  assert.equal(store.add("team", { frame: "team.default", text: "One too many" }), undefined, "a flow's notes cannot grow without end");
-  rmSync(dir, { recursive: true, force: true });
-});
-
 test("sticky positions and edits from a client are tidied or refused", () => {
   const input = readNoteInput({ frame: "a.b", text: "x", sticky: { dx: 12.6, dy: 1e9 }, author: "  A very long name that goes on and on  " });
   assert.ok(typeof input !== "string");
@@ -680,211 +613,4 @@ test("on the board, a sticky note follows the frame it was put beside", () => {
   assert.equal(noteAuthor(notes[0]), "");
   assert.deepEqual([initials("Lena Fischer"), initials("dana"), initials("  "), initials("Mary Jane Watson")], ["LF", "DA", "?", "MJ"]);
   assert.ok(renderBuildBrief(flow, { notes: [{ ...notes[1], author: "Lena", guest: true }] }).includes("- a sticky note near team.default (Lena (guest)): Beside it"));
-});
-
-// ── more than one person ────────────────────────────────────────────────────
-
-/** A page's event stream, as the hub sees it: something to write to, and a request that can close. */
-function fakeStream(): { req: IncomingMessage; res: ServerResponse; events: ServerEvent[]; close: () => void } {
-  const events: ServerEvent[] = [];
-  const req = new EventEmitter();
-  const res = {
-    writeHead: () => undefined,
-    write: (chunk: string) => {
-      if (chunk.startsWith("data: ")) events.push(JSON.parse(chunk.slice(6)) as ServerEvent);
-      return true;
-    },
-    end: () => undefined,
-  };
-  return { req: req as unknown as IncomingMessage, res: res as unknown as ServerResponse, events, close: () => void req.emit("close") };
-}
-
-test("the hub tells each page who else is here and where their pointer is", () => {
-  const hub = new Hub();
-  const of = (events: ServerEvent[], type: ServerEvent["type"]): ServerEvent[] => events.filter((e) => e.type === type);
-
-  const owner = fakeStream();
-  hub.open(owner.req, owner.res, "owner-secret-0001", "owner");
-  const hello = owner.events[0];
-  assert.ok(hello.type === "hello" && hello.role === "owner" && hello.people.length === 1 && hello.people[0].name === "Host");
-
-  const guest = fakeStream();
-  hub.open(guest.req, guest.res, "guest-secret-0001", "guest");
-  const guestHello = guest.events[0];
-  assert.ok(guestHello.type === "hello" && guestHello.role === "guest" && guestHello.people.length === 2);
-  const joined = of(owner.events, "person").at(-1);
-  assert.ok(joined?.type === "person" && joined.person.guest && joined.person.name === "Guest");
-  assert.notEqual(joined.person.color, hello.people[0].color, "two people never share a pencil");
-  assert.ok(!JSON.stringify(owner.events).includes("guest-secret-0001"), "nobody is told another page's secret");
-
-  // A name, a flow and a frame reach the other person; nothing is echoed back.
-  assert.equal(hub.update("guest-secret-0001", { name: "  Lena Fischer  ", flowId: "team", frame: "team.default" }, "guest"), true);
-  const renamed = of(owner.events, "person").at(-1);
-  assert.ok(renamed?.type === "person" && renamed.person.name === "Lena Fischer" && renamed.person.frame === "team.default");
-  assert.equal(of(guest.events, "person").length, 0);
-
-  // A pointer is only sent to people on the same flow.
-  hub.update("guest-secret-0001", { cursor: { x: 120.44, y: 80 } }, "guest");
-  assert.equal(of(owner.events, "cursor").length, 0, "the owner is not on that flow yet");
-  hub.update("owner-secret-0001", { flowId: "team" }, "owner");
-  const t = Date.now() + 1000;
-  hub.update("guest-secret-0001", { cursor: { x: 1e9, y: "nope" } }, "guest", t);
-  hub.update("guest-secret-0001", { cursor: { x: 300, y: 90.26 } }, "guest", t + 50);
-  // Positions that arrive faster than anyone can see are dropped, but a pointer leaving always gets through.
-  hub.update("guest-secret-0001", { cursor: { x: 301, y: 91 } }, "guest", t + 55);
-  const moves = of(owner.events, "cursor");
-  assert.deepEqual(moves.at(-1), { type: "cursor", pid: renamed.person.pid, x: 300, y: 90.3 });
-  assert.ok(moves.some((e) => e.type === "cursor" && e.x === undefined), "a position that makes no sense takes the pointer away");
-  hub.update("guest-secret-0001", { cursor: null }, "guest", t + 56);
-  assert.deepEqual(of(owner.events, "cursor").at(-1), { type: "cursor", pid: renamed.person.pid });
-  hub.update("guest-secret-0001", { cursor: { x: 10, y: 10 } }, "guest", t + 200);
-
-  // What is not a page's own to say is ignored.
-  assert.equal(hub.update("short", { name: "x" }, "guest"), false);
-  assert.equal(hub.update(undefined, { name: "x" }, "guest"), false);
-  assert.equal(hub.update("guest-secret-0001", null, "guest"), false);
-
-  // Closing the page takes the pointer away at once, and the person a little later.
-  guest.close();
-  assert.ok(of(owner.events, "cursor").at(-1)?.type === "cursor" && (of(owner.events, "cursor").at(-1) as { x?: number }).x === undefined);
-  assert.equal(of(owner.events, "left").length, 0);
-  hub.tick(Date.now() + 10000);
-  assert.deepEqual(of(owner.events, "left"), [{ type: "left", pid: renamed.person.pid }]);
-  assert.equal(hub.people().length, 1);
-  hub.close();
-});
-
-test("the guests' door needs the key, and offers no agent endpoint and no way to change the owner's notes", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "quickmock-share-"));
-  const flows = join(dir, "flows");
-  const dist = join(dir, "dist");
-  mkdirSync(flows);
-  mkdirSync(dist);
-  writeFileSync(join(flows, "sign-in.json"), readFileSync(join(examplesDir, "sign-in.json")));
-  writeFileSync(join(dist, "index.html"), "<!doctype html><div id=\"root\">built viewer</div>");
-  const store = new FlowStore(flows);
-  store.init();
-  const notes = new NoteStore(flows);
-  const hub = new Hub();
-  const key = "test-key-0123456789abc";
-  const app = guestApp(key, createApi({ store, notes, hub, baseUrl: "http://localhost:4747" }, "guest"), dist);
-  const server = createServer(app);
-  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const json = { "content-type": "application/json" };
-
-  try {
-    // Without the key: nothing, on any path.
-    for (const path of ["/", "/api/flows", "/api/flows/sign-in", "/mcp", "/src/server/index.ts"]) {
-      assert.equal((await fetch(base + path)).status, 401, path);
-    }
-    assert.equal((await fetch(`${base}/?key=wrong-key-0123456789abc`, { redirect: "manual" })).status, 401);
-    assert.equal((await fetch(`${base}/api/flows`, { headers: { cookie: "qm_share=wrong" } })).status, 401);
-
-    // With it: a cookie, and a redirect that takes the key out of the address.
-    const entry = await fetch(`${base}/?key=${key}`, { redirect: "manual" });
-    assert.equal(entry.status, 302);
-    assert.equal(entry.headers.get("location"), "/");
-    const cookie = entry.headers.get("set-cookie") ?? "";
-    assert.match(cookie, /^qm_share=test-key-0123456789abc; Path=\/; HttpOnly; SameSite=Lax$/);
-    const asGuest = { cookie: cookie.split(";")[0] };
-
-    assert.match(await (await fetch(base + "/", { headers: asGuest })).text(), /built viewer/);
-    assert.deepEqual(await (await fetch(`${base}/api/session`, { headers: asGuest })).json(), { role: "guest" });
-    const listed = (await (await fetch(`${base}/api/flows`, { headers: asGuest })).json()) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(listed), ["flows"], "guests are not told where the owner's agent endpoint is");
-
-    // No agent endpoint, no owner controls, no files.
-    assert.equal((await fetch(`${base}/mcp`, { method: "POST", headers: { ...asGuest, ...json }, body: "{}" })).status, 404);
-    assert.equal((await fetch(`${base}/api/share`, { method: "POST", headers: { ...asGuest, ...json }, body: '{"on":false}' })).status, 404);
-    assert.equal((await fetch(`${base}/api/view`, { method: "POST", headers: { ...asGuest, ...json }, body: '{"flowId":"sign-in"}' })).status, 404);
-    assert.match(await (await fetch(`${base}/flows/sign-in.json`, { headers: asGuest })).text(), /built viewer/, "unknown paths get the viewer, never a file");
-
-    // A guest's notes are marked as a guest's, whatever the guest claims.
-    const posted = await fetch(`${base}/api/flows/sign-in/notes`, {
-      method: "POST",
-      headers: { ...asGuest, ...json },
-      body: JSON.stringify({ frame: "sign-in.default", text: "From a guest", sticky: { dx: 5, dy: 6 }, author: "Lena", guest: false }),
-    });
-    assert.equal(posted.status, 201);
-    const theirs = ((await posted.json()) as { note: ReviewNote }).note;
-    assert.equal(theirs.guest, true);
-    const owners = notes.add("sign-in", { frame: "sign-in.default", text: "From the owner" })!;
-
-    // They can change their own, and not the owner's.
-    const change = (id: string, body: unknown, method = "PATCH"): Promise<Response> =>
-      fetch(`${base}/api/flows/sign-in/notes/${id}`, { method, headers: { ...asGuest, ...json }, body: JSON.stringify(body) });
-    assert.equal((await change(theirs.id, { frame: "sign-in.failed", sticky: { dx: 1, dy: 2 } })).status, 200);
-    assert.equal((await change(theirs.id, { frame: "nope.nope", sticky: { dx: 1, dy: 2 } })).status, 400);
-    assert.equal((await change(owners.id, { text: "Taken over" })).status, 403);
-    assert.equal((await change(owners.id, { done: true })).status, 403);
-    assert.equal((await change(owners.id, {}, "DELETE")).status, 403);
-    assert.equal(notes.get("sign-in", owners.id)?.text, "From the owner");
-    assert.equal((await change(theirs.id, {}, "DELETE")).status, 204);
-
-    // Writing needs JSON, which a page on another site cannot send here.
-    const planted = await fetch(`${base}/api/flows/sign-in/notes`, { method: "POST", headers: { ...asGuest, "content-type": "text/plain" }, body: '{"frame":"sign-in.default","text":"x"}' });
-    assert.equal(planted.status, 400);
-    const big = await fetch(`${base}/api/flows/sign-in/notes`, { method: "POST", headers: { ...asGuest, ...json }, body: JSON.stringify({ frame: "sign-in.default", text: "x".repeat(70000) }) });
-    assert.equal(big.status, 413);
-  } finally {
-    server.closeAllConnections();
-    await new Promise((done) => server.close(done));
-    store.close();
-    hub.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("the owner's door can do what the guests' cannot", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "quickmock-owner-"));
-  writeFileSync(join(dir, "sign-in.json"), readFileSync(join(examplesDir, "sign-in.json")));
-  const store = new FlowStore(dir);
-  store.init();
-  const notes = new NoteStore(dir);
-  const hub = new Hub();
-  let seen: unknown;
-  let sharing = false;
-  const status = (): { on: boolean; starting: boolean; links: [] } => ({ on: sharing, starting: false, links: [] });
-  const api = createApi(
-    {
-      store,
-      notes,
-      hub,
-      baseUrl: "http://localhost:4747",
-      setView: (view) => (seen = view),
-      share: { status, start: async () => ((sharing = true), status()), stop: async () => ((sharing = false), status()) },
-    },
-    "owner",
-  );
-  const express = (await import("express")).default;
-  const app = express();
-  app.use(express.json());
-  app.use("/api", api);
-  const server = createServer(app);
-  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
-  const json = { "content-type": "application/json" };
-  try {
-    const session = (await (await fetch(`${base}/session`)).json()) as { role: string; share: { on: boolean } };
-    assert.deepEqual([session.role, session.share.on], ["owner", false]);
-    assert.deepEqual(await (await fetch(`${base}/share`, { method: "POST", headers: json, body: '{"on":true}' })).json(), { on: true, starting: false, links: [] });
-    assert.equal((await fetch(`${base}/share`, { method: "POST", headers: { "content-type": "text/plain" }, body: '{"on":false}' })).status, 400, "sharing cannot be switched by a form on another site");
-    assert.equal(sharing, true);
-
-    assert.equal((await fetch(`${base}/view`, { method: "POST", headers: json, body: '{"flowId":"sign-in","selectedFrame":"sign-in.default"}' })).status, 204);
-    assert.equal((seen as { selectedFrame?: string }).selectedFrame, "sign-in.default");
-
-    const guests = notes.add("sign-in", { frame: "sign-in.default", text: "From a guest" }, true)!;
-    assert.equal((await fetch(`${base}/flows/sign-in/notes/${guests.id}`, { method: "PATCH", headers: json, body: '{"done":true}' })).status, 200);
-    assert.equal(notes.get("sign-in", guests.id)?.done?.by, "person");
-    assert.equal((await fetch(`${base}/flows/sign-in/notes/${guests.id}`, { method: "DELETE" })).status, 204);
-    assert.equal((await fetch(`${base}/nothing`)).status, 404);
-  } finally {
-    server.closeAllConnections();
-    await new Promise((done) => server.close(done));
-    store.close();
-    hub.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
