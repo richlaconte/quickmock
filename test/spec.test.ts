@@ -614,3 +614,10 @@ test("on the board, a sticky note follows the frame it was put beside", () => {
   assert.deepEqual([initials("Lena Fischer"), initials("dana"), initials("  "), initials("Mary Jane Watson")], ["LF", "DA", "?", "MJ"]);
   assert.ok(renderBuildBrief(flow, { notes: [{ ...notes[1], author: "Lena", guest: true }] }).includes("- a sticky note near team.default (Lena (guest)): Beside it"));
 });
+
+test("the blank flow a person starts from the viewer passes every check", async () => {
+  const { BLANK_FLOW } = await import("../src/shared/blank");
+  const result = validateFlow(BLANK_FLOW);
+  assert.ok(result.flow);
+  assert.deepEqual(result.issues, []);
+});

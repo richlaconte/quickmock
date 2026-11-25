@@ -42,6 +42,11 @@ export function setSharing(on: boolean): Promise<ShareStatus> {
   return ownerPost<ShareStatus>("share", { on });
 }
 
+/** Make a blank flow in this workspace. Owner only. */
+export function newBlankFlow(): Promise<FlowPayload> {
+  return ownerPost<FlowPayload>("flows", {});
+}
+
 export async function getSharing(): Promise<ShareStatus> {
   const res = await fetch(`${API}/share`);
   if (!res.ok) return { on: false };

@@ -1688,8 +1688,30 @@ button.person:focus-visible {
   text-decoration: none;
 }
 
-a.flow-row:hover {
+a.flow-row:hover,
+button.flow-row:hover:not(:disabled) {
   background: var(--qm-blue-wash);
+}
+
+/* The first row: a button that makes a blank flow. It reads as a row, not as a button. */
+button.flow-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--qm-ink);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.flow-row:disabled {
+  cursor: default;
+  color: var(--qm-graphite);
+}
+
+.flow-new .flow-title::before {
+  content: "+ ";
 }
 
 .flow-title {

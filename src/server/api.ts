@@ -3,19 +3,22 @@
 // Two kinds of people reach it. The owner carries the secret from the owner
 // link; guests carry the key from a share link. Guests can read flows, see who
 // is here, and write notes. They cannot change the owner's notes, start or
-// stop sharing, make an agent key, or feed the agent's get_selection. Changing
-// a flow is not here at all: only an agent does that, over /mcp.
+// stop sharing, make an agent key, start a blank flow, or feed the agent's
+// get_selection. Changing what a flow holds is not here at all: only an agent
+// does that, over /mcp.
 
 import { after, type NextRequest } from "next/server";
 
 import { TARGET_IDS } from "../design-system/targets";
 import { renderBuildBrief } from "../shared/brief";
+import { BLANK_FLOW } from "../shared/blank";
 import { frameRefs } from "../shared/machine";
 import type { Role, ShareStatus, ViewState } from "../shared/types";
+import { validateFlow } from "../shared/validate";
 import * as hub from "./hub";
 import { limitsFor } from "./limits";
 import { NoteStore, readNoteInput, readNotePatch } from "./notes";
-import { FlowStore } from "./store";
+import { FlowStore, StaleFlowError, slugify } from "./store";
 import { ownerCookie, roleOf, rotateAgentKey, setSharing, shareKey } from "./workspaces";
 
 const json = (body: unknown, status = 200): Response => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -157,6 +160,24 @@ export async function handleApi(request: NextRequest, ws: string, path: string[]
         await hub.setView(ws, { ...body, flowId: body.flowId, at: new Date().toISOString() } as ViewState);
       }
       return empty();
+    }
+
+    // A blank flow, for the owner to start from before an agent has drawn anything.
+    if (is("POST", "flows")) {
+      if ((await readJson(request)) === undefined) return json({ error: "Send an empty JSON object." }, 400);
+      const limits = limitsFor(ws);
+      if ((await store.count()) >= limits.flows) {
+        return json({ error: `This workspace already has ${limits.flows} flows, which is the most it can hold.` }, 409);
+      }
+      const result = validateFlow(BLANK_FLOW);
+      if (!result.flow) throw new Error("The blank flow does not pass validation.");
+      try {
+        const id = await store.freeId(slugify(result.flow.name));
+        return json(await store.save(id, result.flow, result.issues, "Created"), 201);
+      } catch (error) {
+        if (!(error instanceof StaleFlowError)) throw error;
+        return json({ error: "Another flow was made at the same moment. Try again." }, 409);
+      }
     }
 
     if (is("GET", "share")) return json(await shareStatus());

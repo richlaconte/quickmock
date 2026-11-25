@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import type { FlowSummary } from "../shared/types";
-import { getFlows, getSession, newAgentKey, rememberedAgentKey, useServerEvents, type Session } from "./api";
+import { getFlows, getSession, newAgentKey, newBlankFlow, rememberedAgentKey, useServerEvents, type Session } from "./api";
 import { usePresence } from "./live";
 import { PeopleBar } from "./People";
 import { links } from "./router";
@@ -25,6 +25,7 @@ export function FlowList(): ReactElement {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [making, setMaking] = useState(false);
 
   const load = useCallback(() => {
     getFlows().then(
@@ -48,6 +49,20 @@ export function FlowList(): ReactElement {
   const makeKey = (): void => {
     setKeyError(null);
     newAgentKey().then(setAgentKey, (e: unknown) => setKeyError(e instanceof Error ? e.message : String(e)));
+  };
+
+  const makeBlank = (): void => {
+    setMaking(true);
+    setError(null);
+    newBlankFlow().then(
+      (flow) => {
+        window.location.hash = links.flow(flow.id);
+      },
+      (e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setMaking(false);
+      },
+    );
   };
 
   const command = `claude mcp add --transport http quickmock ${window.location.origin}/mcp --header "Authorization: Bearer ${agentKey ?? "qm_..."}"`;
@@ -78,6 +93,14 @@ export function FlowList(): ReactElement {
             <p className="quiet">No flows yet. Connect an agent and ask it to sketch one, and it will appear here as it is drawn.</p>
           )}
           <ul className="flow-list">
+            {role === "owner" && (
+              <li>
+                <button type="button" className="flow-row flow-new" disabled={making} onClick={makeBlank}>
+                  <span className="flow-title">{making ? "Making a blank flow" : "Blank flow"}</span>
+                  <span className="flow-desc">Start an empty flow, then ask your agent to sketch it.</span>
+                </button>
+              </li>
+            )}
             {(flows ?? []).map((flow) => (
               <li key={flow.id}>
                   <a className="flow-row" href={links.flow(flow.id)}>
