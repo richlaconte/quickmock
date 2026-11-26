@@ -621,3 +621,36 @@ test("the blank flow a person starts from the viewer passes every check", async 
   assert.ok(result.flow);
   assert.deepEqual(result.issues, []);
 });
+
+test("recent flows that can no longer be opened drop off the list", async () => {
+  const { openableRecentFlows, recentFlows } = await import("../src/viewer/recent");
+  const stored = new Map<string, string>();
+  const scope = globalThis as { localStorage?: unknown; fetch: typeof fetch };
+  const realFetch = scope.fetch;
+  scope.localStorage = { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => void stored.set(k, v) };
+  const at = "2026-01-01T00:00:00.000Z";
+  stored.set(
+    "quickmock.recent",
+    JSON.stringify([
+      { ws: "open", id: "sign-in", name: "Sign in", at },
+      { ws: "open", id: "deleted", name: "Deleted", at },
+      { ws: "locked", id: "a", name: "Locked out", at },
+      { ws: "down", id: "b", name: "Server trouble", at },
+      { ws: "offline", id: "c", name: "No network", at },
+    ]),
+  );
+  scope.fetch = (async (url: string) => {
+    if (url.includes("/open/")) return Response.json({ flows: [{ id: "sign-in", name: "Sign in again" }] });
+    if (url.includes("/locked/")) return Response.json({ error: "no" }, { status: 401 });
+    if (url.includes("/down/")) return new Response("oops", { status: 500 });
+    throw new Error("offline");
+  }) as typeof fetch;
+  try {
+    const kept = await openableRecentFlows();
+    assert.deepEqual(kept.map((f) => `${f.ws}/${f.id}:${f.name}`), ["open/sign-in:Sign in again", "down/b:Server trouble", "offline/c:No network"]);
+    assert.deepEqual(recentFlows(), kept, "what is stored is pruned too");
+  } finally {
+    scope.fetch = realFetch;
+    delete scope.localStorage;
+  }
+});

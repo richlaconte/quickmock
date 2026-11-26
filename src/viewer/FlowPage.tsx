@@ -13,10 +13,12 @@ import { Board, computeBoard, type BoardModel } from "./Board";
 import { Device, StateLayout, cx, type RenderContext } from "./kit/render";
 import { announce, usePresence } from "./live";
 import { PeopleBar } from "./People";
+import { rememberFlow } from "./recent";
 import { ReviewNotes, useNotes, type Notes } from "./ReviewNotes";
 import { links } from "./router";
 import { ShareButton } from "./SharePanel";
 import { usePrototype, type Prototype } from "./usePrototype";
+import { WORKSPACE } from "./workspace";
 
 /** Load a flow and keep it fresh as the server reports changes. */
 export function useFlow(id: string): { payload: FlowPayload | null; error: string | null } {
@@ -99,6 +101,9 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
   const model = useMemo(() => computeBoard(flow, written), [flow, writtenKey]);
   const { others, role } = usePresence();
   const people = useMemo(() => others.filter((person) => person.flowId === payload.id), [others, payload.id]);
+
+  // So the landing page can list the flows opened lately in this browser.
+  useEffect(() => rememberFlow(WORKSPACE, payload.id, flow.name), [payload.id, flow.name]);
 
   // Tell everyone else which flow and frame this page is on.
   useEffect(() => {

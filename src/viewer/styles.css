@@ -2284,6 +2284,21 @@ button.flow-row:disabled {
   font-size: 13px;
 }
 
+/* Recent flows are names, not ids, so they are set in the page's own type. */
+.landing-recent ul {
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.landing-recent li {
+  padding: 2px 0;
+}
+
+.landing-recent .quiet,
+.landing-recent .text-button {
+  font-size: 13px;
+}
+
 .landing-steps {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

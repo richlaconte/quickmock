@@ -1,9 +1,12 @@
 "use client";
 
-// Makes a workspace and goes to it. Also lists the workspaces made in this
-// browser, since with no accounts there is nowhere else to find them.
+// Makes a workspace and goes to it. Also lists the flows opened lately and the
+// workspaces made in this browser, since with no accounts there is nowhere
+// else to find them.
 
 import { useEffect, useState, type ReactElement } from "react";
+
+import { forgetFlow, openableRecentFlows, recentLink, type RecentFlow } from "../viewer/recent";
 
 interface Known {
   id: string;
@@ -11,6 +14,14 @@ interface Known {
 }
 
 const LIST = "quickmock.workspaces";
+
+function ago(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  return `on ${new Date(iso).toLocaleDateString()}`;
+}
 
 function known(): Known[] {
   try {
@@ -25,7 +36,18 @@ export function Start(): ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mine, setMine] = useState<Known[]>([]);
-  useEffect(() => setMine(known()), []);
+  const [recent, setRecent] = useState<RecentFlow[]>([]);
+  useEffect(() => {
+    setMine(known());
+    // Shown once each has been checked, so a flow that can no longer be opened never appears.
+    let live = true;
+    void openableRecentFlows().then((flows) => {
+      if (live) setRecent(flows);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const start = async (): Promise<void> => {
     setBusy(true);
@@ -58,6 +80,24 @@ export function Start(): ReactElement {
         <p className="note-error" role="alert">
           {error}
         </p>
+      )}
+      {recent.length > 0 && (
+        <div className="landing-mine landing-recent">
+          <h2>Recent flows</h2>
+          <ul>
+            {recent.map((flow) => (
+              <li key={`${flow.ws}/${flow.id}`}>
+                <a href={recentLink(flow)}>{flow.name}</a>{" "}
+                <span className="quiet">
+                  opened {ago(flow.at)} in {flow.ws}
+                </span>{" "}
+                <button type="button" className="text-button" aria-label={`Take ${flow.name} off this list`} onClick={() => setRecent(forgetFlow(flow.ws, flow.id))}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {mine.length > 0 && (
         <div className="landing-mine">
