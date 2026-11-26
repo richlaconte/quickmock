@@ -166,12 +166,19 @@ export interface ShareStatus {
   link?: string;
 }
 
+/** Whether the owner's agent has been in touch: when it last used the workspace's key. */
+export interface AgentStatus {
+  lastSeen?: string;
+}
+
 /** What the server pushes to every open viewer. */
 export type ServerEvent =
   | { type: "flow"; id?: string; rev?: number }
   | { type: "list" }
   | { type: "notes"; id: string }
   | { type: "share" }
+  /** The owner's agent made a request after being quiet. Owners only. */
+  | { type: "agent" }
   | { type: "hello"; you: string; role: Role; people: Person[]; cursors: { pid: string; x: number; y: number }[] }
   | { type: "person"; person: Person }
   | { type: "left"; pid: string }

@@ -1,4 +1,4 @@
-import type { FlowPayload, FlowSummary, ReviewNote, Role, ShareStatus, ViewState } from "../shared/types";
+import type { AgentStatus, FlowPayload, FlowSummary, ReviewNote, Role, ShareStatus, ViewState } from "../shared/types";
 
 import { API, WORKSPACE } from "./workspace";
 
@@ -51,6 +51,13 @@ export async function getSharing(): Promise<ShareStatus> {
   const res = await fetch(`${API}/share`);
   if (!res.ok) return { on: false };
   return (await res.json()) as ShareStatus;
+}
+
+/** When the agent last used this workspace's key. Owner only; a guest gets nothing. */
+export async function getAgentStatus(): Promise<AgentStatus> {
+  const res = await fetch(`${API}/agent`);
+  if (!res.ok) return {};
+  return (await res.json()) as AgentStatus;
 }
 
 // The agent key is shown once, when it is made. It is kept for this tab so the

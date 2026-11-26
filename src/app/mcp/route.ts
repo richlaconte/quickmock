@@ -7,7 +7,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import pkg from "../../../package.json";
-import { getView } from "../../server/hub";
+import { agentSeen, getView } from "../../server/hub";
 import { buildMcpServer } from "../../server/mcp";
 import { NoteStore } from "../../server/notes";
 import { FlowStore } from "../../server/store";
@@ -27,6 +27,9 @@ export async function POST(request: Request): Promise<Response> {
       "WWW-Authenticate": "Bearer",
     });
   }
+
+  // So the viewer can say whether an agent is connected. It must never fail the request.
+  await agentSeen(ws).catch((error: unknown) => console.error("Could not note the agent:", error));
 
   const origin = new URL(request.url).origin;
   const server = buildMcpServer({

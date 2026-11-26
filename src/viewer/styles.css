@@ -874,6 +874,31 @@ button.person:focus-visible {
   font-size: 12px;
 }
 
+/* The agent: a dot that fills in while one is at work. */
+.agent-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border: 1px solid var(--qm-ink);
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.agent-button.is-live .agent-dot,
+.agent-status.is-on .agent-dot {
+  background: var(--qm-ink);
+}
+
+.agent-panel .command {
+  max-height: 130px;
+  overflow: auto;
+}
+
+.agent-panel .bar-button {
+  margin-bottom: 10px;
+}
+
 .share-close {
   display: block;
   margin: 10px 0 0 auto;

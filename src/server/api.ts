@@ -180,6 +180,11 @@ export async function handleApi(request: NextRequest, ws: string, path: string[]
       }
     }
 
+    if (is("GET", "agent")) {
+      const lastSeen = await hub.agentLastSeen(ws);
+      return json(lastSeen ? { lastSeen } : {});
+    }
+
     if (is("GET", "share")) return json(await shareStatus());
 
     if (is("POST", "share")) {

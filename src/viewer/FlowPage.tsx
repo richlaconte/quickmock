@@ -7,6 +7,7 @@ import { tokens } from "../design-system/tokens";
 import { describeTransition, findFrame, frameRefs, outgoing, pageBehind, resolveRef } from "../shared/machine";
 import type { FlowNode, FlowPayload, Issue, Role, Scalar } from "../shared/types";
 import { countIssues } from "../shared/validate";
+import { AgentButton } from "./AgentPanel";
 import { getFlow, postView, useServerEvents } from "./api";
 import { Board, computeBoard, type BoardModel } from "./Board";
 import { Device, StateLayout, cx, type RenderContext } from "./kit/render";
@@ -176,6 +177,7 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
         <a className="bar-link" href={links.system}>
           Design system
         </a>
+        {role === "owner" && <AgentButton />}
         {role === "owner" && <ShareButton flowId={payload.id} />}
       </header>
       <div className={cx("workspace-main", mode === "board" && "is-board-only")}>

@@ -260,6 +260,28 @@ export async function setView(ws: string, view: ViewState): Promise<void> {
   await backend().set(viewKey(ws), JSON.stringify(view), 24 * 60 * 60);
 }
 
+const agentKey = (ws: string): string => `qm:${ws}:agent`;
+
+/** How long after its last request an agent still counts as at work. */
+const AGENT_QUIET_MS = 60 * 1000;
+
+/**
+ * Note that an agent just used this workspace's key. The owner's pages are told
+ * when it starts up after being quiet, not on every request.
+ */
+export async function agentSeen(ws: string): Promise<void> {
+  const store = backend();
+  const before = await store.get(agentKey(ws));
+  const now = new Date();
+  await store.set(agentKey(ws), now.toISOString(), 30 * 24 * 60 * 60);
+  if (!before || now.getTime() - new Date(before).getTime() > AGENT_QUIET_MS) await send(ws, { type: "agent" }, { owners: true });
+}
+
+/** When an agent last used this workspace's key, if one has lately. */
+export async function agentLastSeen(ws: string): Promise<string | undefined> {
+  return backend().get(agentKey(ws));
+}
+
 export async function getView(ws: string): Promise<ViewState | undefined> {
   const saved = await backend().get(viewKey(ws));
   return saved ? (JSON.parse(saved) as ViewState) : undefined;
