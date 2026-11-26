@@ -1105,6 +1105,20 @@ button.person:focus-visible {
   outline: none;
 }
 
+/* The selected frame: what "this" means to the agent. A plain ink line, so it
+   reads apart from the hand-drawn ring that marks where the prototype is. */
+.frame.is-selected .frame-thumb,
+.frame.is-selected:hover .frame-thumb {
+  outline: 2px solid var(--qm-ink);
+  outline-offset: 3px;
+}
+
+.frame-tag.frame-picked {
+  padding: 0 5px;
+  background: var(--qm-ink);
+  color: var(--qm-paper);
+}
+
 .frame-note {
   margin: 8px 0 0;
   font-family: var(--qm-font-hand);

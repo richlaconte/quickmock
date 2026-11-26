@@ -134,6 +134,22 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
     [jump],
   );
 
+  // Clicking the empty board, or Escape, lets go of the frame. The agent then has no "this" to go on.
+  const deselect = useCallback(() => {
+    setSelected(undefined);
+    setPointed(undefined);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // Escape in a field or an open panel belongs to that, not to the board.
+      if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable], [role=dialog]")) return;
+      deselect();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deselect]);
+
   const point = useCallback(
     (path: string, node: FlowNode) => {
       setPointed({ frame: proto.current, path, type: node.type, summary: summarise(node) });
@@ -194,12 +210,14 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
               model={model}
               issues={payload.issues}
               start={start}
-              current={proto.current}
+              // With no prototype beside it, the board has no "you are here" to show.
+              current={mode === "board" ? undefined : proto.current}
               visited={visited}
               taken={taken}
               selected={selected}
               changed={changed}
               onSelect={select}
+              onDeselect={deselect}
               notes={notes}
               role={role}
               people={people}

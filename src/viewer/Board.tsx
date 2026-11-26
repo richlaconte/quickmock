@@ -275,6 +275,7 @@ const FrameCard = memo(function FrameCard({
           {change && <Ink shape="box" seed={`mark/${frame.ref}`} color="highlight" fill="highlight" pen="fine" rough="loose" />}
           {frame.ref}
         </span>
+        {isSelected && <span className="frame-tag frame-picked">selected</span>}
         {isStart && <span className="frame-tag">start</span>}
         {change && <span className="frame-tag">{change}</span>}
         {isVisited && !isCurrent && <span className="frame-dot" title="Visited in this prototype session" />}
@@ -369,6 +370,8 @@ export interface BoardProps {
   selected?: string;
   changed: { added: string[]; changed: string[] };
   onSelect: (ref: string) => void;
+  /** A click on the empty board: nothing is selected any more. */
+  onDeselect: () => void;
   /** Notes on this flow: the sticky ones are drawn on the board. */
   notes: Notes;
   role?: Role;
@@ -390,6 +393,7 @@ export function Board({
   selected,
   changed,
   onSelect,
+  onDeselect,
   notes,
   role,
   people,
@@ -509,6 +513,12 @@ export function Board({
     const at = toBoard(e.clientX, e.clientY);
     setDraft({ x: at.x - STICKY_WIDTH / 2, y: at.y - 24 });
   };
+  // A click on an empty part of the board lets go of the selected frame. Dragging the board does not.
+  const onClick = (e: MouseEvent): void => {
+    if (dragged.current) return;
+    if ((e.target as HTMLElement).closest(".frame, .sticky, .board-controls, .edge-label")) return;
+    onDeselect();
+  };
   const stickInView = (): void => {
     const el = host.current;
     if (!el) return;
@@ -551,6 +561,7 @@ export function Board({
       onPointerUp={endDrag}
       onPointerLeave={onPointerLeave}
       onPointerCancel={endDrag}
+      onClick={onClick}
       onDoubleClick={onDoubleClick}
       style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${24 * view.k}px ${24 * view.k}px` }}
     >
