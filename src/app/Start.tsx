@@ -53,7 +53,7 @@ export function Start(): ReactElement {
       <button type="button" className="bar-button landing-button" disabled={busy} onClick={() => void start()}>
         {busy ? "Making your workspace" : "Start a workspace"}
       </button>
-      <span className="quiet">Free while quickmock is in preview. It starts with three example flows.</span>
+      <span className="quiet">Free while lowfi.design is in preview. It starts with three example flows.</span>
       {error && (
         <p className="note-error" role="alert">
           {error}

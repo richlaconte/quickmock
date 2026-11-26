@@ -49,7 +49,7 @@ export function BriefPage({ id }: { id: string }): ReactElement {
     <div className="page">
       <header className="flowbar">
         <a className="wordmark" href={links.list}>
-          quickmock
+          lowfi.design
         </a>
         <h1 className="flow-name">Build brief</h1>
         <span className="grow" />
@@ -76,7 +76,7 @@ export function BriefPage({ id }: { id: string }): ReactElement {
             {copied ? "Copied" : "Copy brief"}
           </button>
           <p className="quiet">
-            An agent connected to quickmock can fetch it itself. Ask it to “get the build brief for {id} and build it”.
+            An agent connected to lowfi.design can fetch it itself. Ask it to “get the build brief for {id} and build it”.
           </p>
         </aside>
         <div className="brief-body">

@@ -200,9 +200,9 @@ Transition: from*, to*, and exactly one of on or after; plus when, set, label.
 
 export function renderIntro(): string {
   return [
-    "# quickmock design system",
+    "# lowfi.design design system",
     "",
-    "quickmock turns one flow spec into two views of the same thing: a board with a pen-and-ink frame for every state of every screen, and a working prototype that runs the spec. It is for testing layout, wording and flow before anyone spends time on visual design. The sketch look is deliberate: reviewers should judge structure, not styling.",
+    "lowfi.design turns one flow spec into two views of the same thing: a board with a pen-and-ink frame for every state of every screen, and a working prototype that runs the spec. It is for testing layout, wording and flow before anyone spends time on visual design. The sketch look is deliberate: reviewers should judge structure, not styling.",
     "",
     "## Principles",
     ...principles.map((p, i) => `${i + 1}. ${p}`),

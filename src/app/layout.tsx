@@ -11,7 +11,7 @@ import type { ReactElement, ReactNode } from "react";
 import { cssVariables } from "../design-system/tokens";
 
 export const metadata: Metadata = {
-  title: "quickmock",
+  title: "lowfi.design",
   description:
     "Lo-fi, pen-and-ink flow prototypes, drawn by your agent over MCP. One spec, two views: a board of every screen state and a prototype you can click through.",
   icons: { icon: "data:," },

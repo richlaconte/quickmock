@@ -51,7 +51,7 @@ export function FlowPage({ id, at }: { id: string; at?: string }): ReactElement 
       <div className="page">
         <header className="flowbar">
           <a className="wordmark" href={links.list}>
-            quickmock
+            lowfi.design
           </a>
         </header>
         <main className="notice">
@@ -154,7 +154,7 @@ function Workspace({ payload, at }: { payload: FlowPayload; at?: string }): Reac
     <div className="page workspace">
       <header className="flowbar">
         <a className="wordmark" href={links.list}>
-          quickmock
+          lowfi.design
         </a>
         <h1 className="flow-name">{flow.name}</h1>
         <span className="grow" />

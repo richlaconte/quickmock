@@ -33,7 +33,7 @@ export function App(): ReactElement {
         <p className="banner offline" role="alert">
           {role === "guest"
             ? "You are disconnected. Sharing may have been turned off: ask for a new link. What you see may be out of date."
-            : "You are disconnected. quickmock will reconnect by itself; until then, what you see may be out of date."}
+            : "You are disconnected. lowfi.design will reconnect by itself; until then, what you see may be out of date."}
         </p>
       )}
       <Page route={route} />

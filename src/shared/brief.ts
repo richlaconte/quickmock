@@ -269,7 +269,7 @@ export function renderBuildBrief(flow: Flow, options: BriefOptions = {}): string
   out.push(`# Build brief: ${flow.name}${only ? ` (screen: ${only})` : ""}`, "");
   if (flow.description) out.push(flow.description, "");
   out.push(
-    "This brief comes from a quickmock flow: a lo-fi, pen-and-ink prototype used to settle layout, wording and behaviour before any visual design. Build the real thing from it.",
+    "This brief comes from a lowfi.design flow: a lo-fi, pen-and-ink prototype used to settle layout, wording and behaviour before any visual design. Build the real thing from it.",
     "",
     "- Keep every screen and state below, the wording, and the behaviour table. They were reviewed as they are.",
     "- Do not copy the look. The sketch style is deliberate and carries no visual decisions; take those from the product's design system.",

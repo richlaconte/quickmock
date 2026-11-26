@@ -1,4 +1,4 @@
--- quickmock, hosted. Safe to run again: every statement only adds what is missing.
+-- lowfi.design, hosted. Safe to run again: every statement only adds what is missing.
 
 create table if not exists workspaces (
   id          text primary key,

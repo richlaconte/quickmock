@@ -1,12 +1,12 @@
-# quickmock
+# lowfi.design
 
 Lo-fi, pen-and-ink flow prototypes, drawn by an agent over MCP.
 
-You describe a flow to your agent. It writes one JSON spec, and quickmock turns that spec into two views of the same thing in your browser: a **board** with a frame for every state of every screen, and a **working prototype** you can click through. Everything is drawn as a sketch on purpose, so people react to layout, wording and behaviour instead of to styling.
+You describe a flow to your agent. It writes one JSON spec, and lowfi.design turns that spec into two views of the same thing in your browser: a **board** with a frame for every state of every screen, and a **working prototype** you can click through. Everything is drawn as a sketch on purpose, so people react to layout, wording and behaviour instead of to styling.
 
 Other people can open the same board at the same time: you see each other's pointers, and everyone can leave notes and sticky notes for the agent to work through.
 
-quickmock is a hosted app: Next.js on Vercel, with flows and notes in Postgres (Neon) and live updates over Redis (Upstash). "quickmock" is a working name.
+lowfi.design is a hosted app: Next.js on Vercel, with flows and notes in Postgres (Neon) and live updates over Redis (Upstash).
 
 ## How it works for someone using it
 
@@ -19,18 +19,18 @@ There are no accounts. A workspace is opened with links that carry secrets:
 | **Guest link** | `/w/<workspace>?key=...`, made when the owner presses Share. | Read every flow in the workspace, click through prototypes, write notes. |
 
 1. Press **Start a workspace** on the front page. It starts with three example flows.
-2. Copy the command from the workspace's front page and run it once in the project you want to use quickmock from:
+2. Copy the command from the workspace's front page and run it once in the project you want to use lowfi.design from:
 
    ```bash
-   claude mcp add --transport http quickmock https://<your-domain>/mcp --header "Authorization: Bearer qm_..."
+   claude mcp add --transport http lowfi https://<your-domain>/mcp --header "Authorization: Bearer qm_..."
    ```
 
    Add `--scope user` to have it in every project. Any MCP client that can send a header works the same way.
 3. Ask in plain words:
 
-   > Use quickmock to sketch a password reset flow for a mobile app, with the unhappy paths.
+   > Use lowfi.design to sketch a password reset flow for a mobile app, with the unhappy paths.
 
-The board fills in while the agent works. Click a frame or use **Point** on a component, say "this", and the agent can ask quickmock what you mean.
+The board fills in while the agent works. Click a frame or use **Point** on a component, say "this", and the agent can ask lowfi.design what you mean.
 
 To ask for changes, write notes: click a frame, type in the Notes tab and press Enter, or double-click the board for a sticky note. Then tell the agent to work through the notes. It reads them, makes the changes and marks each one done with a line saying what it did.
 
@@ -183,7 +183,7 @@ Each material means one thing: ink is the design, pencil is secondary, red penci
 
 ## The build brief
 
-When a flow is agreed, `get_build_brief` turns it into a spec for building the real thing: every state with its components and wording, the variables and transition table, one acceptance check per state and per transition, the open questions, any of your notes that are still open, and a mapping from quickmock components to a real library.
+When a flow is agreed, `get_build_brief` turns it into a spec for building the real thing: every state with its components and wording, the variables and transition table, one acceptance check per state and per transition, the open questions, any of your notes that are still open, and a mapping from lowfi.design components to a real library.
 
 Targets: `ui-sdk` ([UI SDK](https://ui-sdk.dev), the default), `shadcn`, and `none` (your own design system). Add one in `targets.ts`.
 

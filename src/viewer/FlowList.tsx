@@ -65,7 +65,7 @@ export function FlowList(): ReactElement {
     );
   };
 
-  const command = `claude mcp add --transport http quickmock ${window.location.origin}/mcp --header "Authorization: Bearer ${agentKey ?? "qm_..."}"`;
+  const command = `claude mcp add --transport http lowfi ${window.location.origin}/mcp --header "Authorization: Bearer ${agentKey ?? "qm_..."}"`;
   const copy = (): void => {
     void navigator.clipboard?.writeText(command).then(() => {
       setCopied(true);
@@ -77,7 +77,7 @@ export function FlowList(): ReactElement {
     <div className="page">
       <header className="flowbar">
         <a className="wordmark" href={links.list}>
-          quickmock
+          lowfi.design
         </a>
         <span className="grow" />
         <PeopleBar />
@@ -156,7 +156,7 @@ export function FlowList(): ReactElement {
               </p>
             )}
             <p>Then ask for a flow in plain words:</p>
-            <p className="ask">Use quickmock to sketch a password reset flow for a mobile app, with the unhappy paths.</p>
+            <p className="ask">Use lowfi.design to sketch a password reset flow for a mobile app, with the unhappy paths.</p>
             <p>The board fills in here while the agent works. Click a frame, say “this”, and the agent knows which one you mean.</p>
             {session?.ownerLink && (
               <>

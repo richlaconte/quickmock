@@ -23,7 +23,7 @@ export async function POST(request: Request): Promise<Response> {
   const key = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
   const ws = key ? await workspaceForKey(key) : undefined;
   if (!ws) {
-    return rpcError(401, -32001, "This endpoint needs a quickmock agent key: send it as \"Authorization: Bearer qm_...\". The workspace's front page has the command.", {
+    return rpcError(401, -32001, "This endpoint needs a lowfi.design agent key: send it as \"Authorization: Bearer qm_...\". The workspace's front page has the command.", {
       "WWW-Authenticate": "Bearer",
     });
   }

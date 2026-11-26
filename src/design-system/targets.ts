@@ -1,4 +1,4 @@
-// Build targets: how each quickmock component maps onto a real component
+// Build targets: how each lowfi.design component maps onto a real component
 // library when a flow graduates from sketch to product. The brief itself is
 // target-neutral; only this mapping changes.
 
@@ -7,7 +7,7 @@ export interface BuildTarget {
   name: string;
   /** Read by the agent that does the build. */
   intro: string[];
-  /** quickmock component type → what to build it with. */
+  /** lowfi.design component type → what to build it with. */
   map: Record<string, { use: string; note?: string }>;
 }
 
@@ -17,7 +17,7 @@ const UI_SDK: BuildTarget = {
   intro: [
     "UI SDK supplies behaviour (keyboard, focus, selection, popups and the ARIA they need) and no styles. Bring the product's own design system for every visual decision.",
     "It is in beta and its APIs can change. Do not write its API from memory: install the skill (npx skills add vercel-labs/ui --skill ui-sdk) or read the Markdown docs shipped inside the installed package (node_modules/@ui-sdk/react/docs).",
-    "The names below are the UI SDK components that most closely match each quickmock component. Check each one's current API before using it.",
+    "The names below are the UI SDK components that most closely match each lowfi.design component. Check each one's current API before using it.",
     "Use its testing kit to check keyboard behaviour, focus and ARIA for each state once it is built.",
   ],
   map: {
@@ -94,7 +94,7 @@ const OWN: BuildTarget = {
   id: "none",
   name: "the product's own design system",
   intro: [
-    "Map each quickmock component to the closest component in the product's design system. Where there is none, say so instead of inventing one.",
+    "Map each lowfi.design component to the closest component in the product's design system. Where there is none, say so instead of inventing one.",
   ],
   map: {},
 };

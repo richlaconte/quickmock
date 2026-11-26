@@ -118,7 +118,7 @@ export function StyleGuide(): ReactElement {
     <div className="page">
       <header className="flowbar">
         <a className="wordmark" href={links.list}>
-          quickmock
+          lowfi.design
         </a>
         <h1 className="flow-name">Design system</h1>
         <span className="grow" />

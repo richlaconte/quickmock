@@ -20,7 +20,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ ws: 
           restarted: ask for a new link.
         </p>
         <p>
-          <a href="/">About quickmock</a>
+          <a href="/">About lowfi.design</a>
         </p>
       </main>
     );

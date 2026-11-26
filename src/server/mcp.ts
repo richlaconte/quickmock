@@ -1,4 +1,4 @@
-// The MCP surface: what an agent such as Claude Code can do with quickmock.
+// The MCP surface: what an agent such as Claude Code can do with lowfi.design.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
@@ -20,14 +20,14 @@ export interface McpContext {
   store: FlowStore;
   /** Notes the person wrote in the viewer. */
   notes: NoteStore;
-  /** Where this workspace's viewer is served, e.g. https://quickmock.example/w/abc123 */
+  /** Where this workspace's viewer is served, e.g. https://lowfi.design/w/abc123 */
   baseUrl: string;
   /** Latest state reported by the owner's viewer. */
   view: () => Promise<ViewState | undefined>;
   version: string;
 }
 
-const INSTRUCTIONS = `quickmock draws lo-fi, pen-and-ink flow prototypes from a JSON spec: a board with a frame for every state of every screen, and a working prototype of the same spec, both live in the person's browser.
+const INSTRUCTIONS = `lowfi.design draws lo-fi, pen-and-ink flow prototypes from a JSON spec: a board with a frame for every state of every screen, and a working prototype of the same spec, both live in the person's browser.
 
 How to work with it:
 1. Call get_design_system before your first create_flow or patch_flow in a session. Only the components, props and fields it lists are accepted, and there is nothing to style.
@@ -115,14 +115,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     return `There is no flow "${id}". ${ids.length ? `Flows: ${ids.join(", ")}.` : "There are no flows yet: use create_flow."}`;
   };
 
-  const server = new McpServer({ name: "quickmock", version: ctx.version }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: "lowfi.design", version: ctx.version }, { instructions: INSTRUCTIONS });
 
   server.registerTool(
     "get_design_system",
     {
       title: "Read the design system",
       description:
-        "Read the quickmock design system: the flow spec format, every component with its props, the patterns, and the rules lint checks. Call this before creating or patching a flow; only what it lists is accepted. Pass `component` for one component's full detail with an example, or `section` for one part.",
+        "Read the lowfi.design design system: the flow spec format, every component with its props, the patterns, and the rules lint checks. Call this before creating or patching a flow; only what it lists is accepted. Pass `component` for one component's full detail with an example, or `section` for one part.",
       inputSchema: {
         section: z
           .enum(["all", "format", "components", "patterns", "rules"])
@@ -146,7 +146,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     "list_flows",
     {
       title: "List flows",
-      description: "List the flows in this quickmock workspace with their ids, sizes, lint counts and viewer URLs.",
+      description: "List the flows in this lowfi.design workspace with their ids, sizes, lint counts and viewer URLs.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -355,7 +355,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     "get_build_brief",
     {
       title: "Get the build brief",
-      description: `Turn an agreed flow into a brief for building the real product: every screen and state with its components and wording, the variables and the transition table, one acceptance check per state and per transition, a mapping from quickmock components to a real component library, and the open questions. Call this when moving from prototype to implementation. Targets: ${TARGETS.map((t) => `"${t.id}" (${t.name})`).join(", ")}. Pass \`screen\` to get one screen at a time when the flow is large.`,
+      description: `Turn an agreed flow into a brief for building the real product: every screen and state with its components and wording, the variables and the transition table, one acceptance check per state and per transition, a mapping from lowfi.design components to a real component library, and the open questions. Call this when moving from prototype to implementation. Targets: ${TARGETS.map((t) => `"${t.id}" (${t.name})`).join(", ")}. Pass \`screen\` to get one screen at a time when the flow is large.`,
       inputSchema: {
         flow_id: z.string().describe("The flow's id."),
         target: z.string().optional().describe(`The component library to map onto: ${TARGET_IDS.join(", ")}. Default "ui-sdk".`),

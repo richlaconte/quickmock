@@ -1,4 +1,4 @@
-// End-to-end check of a running quickmock, the way an agent, an owner and a guest would use it.
+// End-to-end check of a running lowfi.design, the way an agent, an owner and a guest would use it.
 // Start the server first (npm run dev), then: npm run smoke
 // Or point it at a deployment: QUICKMOCK_URL=https://your-app.vercel.app npm run smoke
 // It makes a workspace of its own, with a flow called "smoke-test", and prints the link to it.
